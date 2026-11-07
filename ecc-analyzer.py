@@ -14,7 +14,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
-VERSION = "1.1.4"
+VERSION = "1.1.5"
 MAX_RANGE_CANDIDATES = 100_000
 
 
@@ -45,7 +45,7 @@ def banner() -> None:
         " # # # # #   ##   ##    ",
         "#  # ##  #### #   ## ###",
         "##### # # # #  #   ##   #",
-        "   # #  # #  #  ###  ### ",
+        "   # #  # # #  ###  ### ",
     )
     print()
     for line in logo:
@@ -167,7 +167,8 @@ def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable
             matches += 1
             status = Style.paint("[MATCH]", Style.GREEN + Style.BOLD)
             candidate_label = Style.paint(f"Candidate #{tested}", Style.WHITE + Style.BOLD)
-            print(f"  {status} {candidate_label} matches the certificate public key.")
+            private_key = Style.paint(str(candidate), Style.RED + Style.BOLD)
+            print(f"  {status} {candidate_label} · Private key: {private_key} matches the certificate public key.")
         elif tested % 5000 == 0:
             print(Style.paint(f"  Tested {tested:,} candidates...", Style.DIM))
 
@@ -177,7 +178,7 @@ def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable
     else:
         print(Style.paint("  NO MATCH · No supplied candidate matched.", Style.YELLOW + Style.BOLD))
     print(f"  Candidates tested: {tested:,}")
-    print(Style.paint("  Candidate values are not echoed to the terminal.", Style.DIM))
+    print(Style.paint("  Only matching candidate values are displayed.", Style.DIM))
     return matches > 0
 
 
