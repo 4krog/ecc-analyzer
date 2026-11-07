@@ -1,16 +1,17 @@
-# ECC Analyzer
+# 4KROG ECC Analyzer
 
-A lightweight command-line utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
+A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 
 ## What it does
 
 - Loads X.509 certificates in PEM or DER format.
 - Displays certificate metadata and EC public-key parameters.
-- Accepts one candidate, a list of candidates from a text file, or a bounded numeric range.
+- Tests one candidate, a manually entered list, a candidate file, or a bounded numeric range.
 - Derives the public point for each candidate on the certificate's curve and compares it with the certificate public key.
-- Offers an interactive terminal menu.
+- Starts directly in an interactive terminal menu: no command-line arguments are required.
+- Uses Python's standard library for the terminal interface and `cryptography` for cryptographic operations. No additional UI packages are required.
 
 ## What it does not do
 
@@ -19,7 +20,7 @@ A lightweight command-line utility to inspect X.509 certificates containing elli
 - It does not connect to remote hosts, scan networks, or exploit services.
 - It does not validate certificate trust chains, revocation status, or hostname matching.
 
-A match means only that the supplied integer derives the public key contained in the certificate. This is useful for demonstrating the danger of weak, predictable, or improperly generated private keys. It does not imply a weakness in the elliptic curve itself.
+A match means only that the supplied integer derives the public key contained in the certificate. This demonstrates the danger of weak, predictable, or improperly generated private keys; it does not imply a weakness in the elliptic curve itself.
 
 ## Requirements
 
@@ -31,72 +32,47 @@ A match means only that the supplied integer derives the public key contained in
 It is recommended to use a virtual environment:
 
 ```bash
+git clone https://github.com/4krog/ecc-analyzer.git
+cd ecc-analyzer
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
 ## Usage
 
-Inspect a certificate:
+Start the interactive application:
 
 ```bash
-python ecc-analyzer.py certificate.pem --inspect
+python ecc-analyzer.py
 ```
 
-Test one decimal candidate:
+The menu lets you:
 
-```bash
-python ecc-analyzer.py certificate.pem --key 1234
-```
+1. Load and inspect a PEM or DER certificate.
+2. Test one decimal or hexadecimal candidate.
+3. Test a comma-separated manual list or load candidates from a text file.
+4. Test an inclusive numeric range.
+5. Run a guided analysis session.
 
-Test a hexadecimal candidate:
+Candidate files accept one decimal or `0x`-prefixed hexadecimal value per line. Blank lines and comments beginning with `#` are ignored.
 
-```bash
-python ecc-analyzer.py certificate.pem --key 0x4d2
-```
+Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent accidental oversized runs.
 
-Test candidates from a file (one value per line; lines may contain comments beginning with `#`):
+## Terminal presentation
 
-```text
-# Example candidate list
-1
-2
-0x10
-1234
-```
-
-```bash
-python ecc-analyzer.py certificate.pem --candidates candidates.txt
-```
-
-Test an inclusive numeric range:
-
-```bash
-python ecc-analyzer.py certificate.pem --range 1:1000
-```
-
-The range mode is limited to 100,000 candidates to prevent accidental oversized runs.
-
-Run without a mode to open the interactive menu:
-
-```bash
-python ecc-analyzer.py certificate.pem
-```
-
-## Exit codes
-
-- `0`: inspection completed or at least one candidate matched.
-- `1`: candidate testing completed, but no candidate matched.
-- `2`: input, certificate, or usage error.
+The interface uses standard ANSI terminal colors when output is connected to a terminal. Set `NO_COLOR` to disable color output. No third-party terminal UI library is used.
 
 ## Security and responsible use
 
 Use this utility only with certificates and systems you own or are explicitly authorized to assess. Candidate testing should be restricted to controlled research and training environments. Never use intentionally weak test keys in production.
 
+Candidate values are not echoed in result messages. Treat candidate input, terminal scrollback, and local shell sessions as sensitive regardless.
+
 ## Technical note
 
-For a candidate private scalar `d), the tool derives the corresponding elliptic-curve public point `Q = d · G` using the curve declared by the certificate, then compares the resulting public numbers with the certificate's public key. It does not attempt to solve the elliptic-curve discrete logarithm problem.
+For a candidate private scalar `d`, the tool derives the corresponding elliptic-curve public point `Q = d · G` using the curve declared by the certificate, then compares the resulting public numbers with the certificate's public key. It does not attempt to solve the elliptic-curve discrete logarithm problem.
 
 ## License
 
