@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from datetime import timezone
 from typing import Iterable
 
 from cryptography import __version__ as cryptography_version
@@ -13,7 +14,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 MAX_RANGE_CANDIDATES = 100_000
 
 
@@ -89,6 +90,15 @@ def load_certificate(path: Path) -> x509.Certificate:
     return cert
 
 
+def certificate_time_utc(cert: x509.Certificate, utc_attribute: str, legacy_attribute: str):
+    """Return certificate validity time as an aware UTC datetime across cryptography versions."""
+    value = getattr(cert, utc_attribute, None)
+    if value is None:
+        # Older cryptography releases expose naive datetimes documented as UTC.
+        value = getattr(cert, legacy_attribute).replace(tzinfo=timezone.utc)
+    return value
+
+
 def inspect_certificate(cert: x509.Certificate, path: Path | None = None) -> ec.EllipticCurvePublicKey:
     public_key = cert.public_key()
     if not isinstance(public_key, ec.EllipticCurvePublicKey):
@@ -103,8 +113,10 @@ def inspect_certificate(cert: x509.Certificate, path: Path | None = None) -> ec.
     print(f"  Subject       : {cert.subject.rfc4514_string() or '(empty)'}")
     print(f"  Issuer        : {cert.issuer.rfc4514_string() or '(empty)'}")
     print(f"  Serial        : {cert.serial_number}")
-    print(f"  Valid from    : {cert.not_valid_before_utc.isoformat()}")
-    print(f"  Valid until   : {cert.not_valid_after_utc.isoformat()}")
+    valid_from = certificate_time_utc(cert, "not_valid_before_utc", "not_valid_before")
+    valid_until = certificate_time_utc(cert, "not_valid_after_utc", "not_valid_after")
+    print(f"  Valid from    : {valid_from.isoformat()}")
+    print(f"  Valid until   : {valid_until.isoformat()}")
     print(f"  Signature OID : {cert.signature_algorithm_oid.dotted_string}")
     print(f"  Public key    : EC / ECDSA")
     print(f"  Curve         : {public_key.curve.name}")
