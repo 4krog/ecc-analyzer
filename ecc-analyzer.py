@@ -257,7 +257,12 @@ def main_menu() -> int:
 
         try:
             if choice in ("1", "01"):
-                cert_path = ask_path() if cert is None else ask_path("Certificate path (Enter to keep current): ") if input else cert_path
+                if cert is None:
+                    cert_path = ask_path()
+                else:
+                    replacement_path = input("  Certificate path (Enter to keep current): ").strip()
+                    if replacement_path:
+                        cert_path = Path(replacement_path).expanduser()
                 if cert_path is None:
                     raise ValueError("No certificate selected.")
                 cert = load_certificate(cert_path)
