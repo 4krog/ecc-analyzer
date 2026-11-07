@@ -2,7 +2,7 @@
 
 A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
 
-**Version:** 1.1.4
+**Version:** 1.1.5
 
 ## What it does
 
@@ -64,13 +64,13 @@ Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent 
 
 ## Terminal presentation
 
-The interface uses standard ANSI terminal colors when output is connected to a terminal. Successful match status labels are bold green, candidate identifiers are bold bright white, non-matches are bold yellow, and errors are bold red. Set `NO_COLOR` to disable color output. No third-party terminal UI library is used.
+The interface uses standard ANSI terminal colors when output is connected to a terminal. Successful match status labels are bold green, candidate identifiers are bold bright white, and a matching private-key candidate is displayed in bold red; non-matches are bold yellow, and errors are bold red. Set `NO_COLOR` to disable color output. No third-party terminal UI library is used.
 
 ## Security and responsible use
 
 Use this utility only with certificates and systems you own or are explicitly authorized to assess. Candidate testing should be restricted to controlled research and training environments. Never use intentionally weak test keys in production.
 
-Candidate values are not echoed in result messages. Treat candidate input, terminal scrollback, and local shell sessions as sensitive regardless.
+Only matching candidate values are echoed in result messages, in bold red. Treat candidate input, terminal scrollback, and local shell sessions as sensitive regardless.
 
 ## Technical note
 
