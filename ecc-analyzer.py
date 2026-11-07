@@ -38,22 +38,20 @@ class Style:
 
 
 def banner() -> None:
-    red = Style.RED
-    reset = Style.RESET
-    if not Style.enabled:
-        red = reset = ""
+    logo = (
+        "   _____ _____ _____   ____   ____   _____",
+        "  |  ___/  ___/  __ \\ / ___| / ___| / ___/",
+        "  | |__ | |   | |  | | |    | |     \\___ \\",
+        "  |  __|| |   | |  | | |___ | |___   ___) |",
+        "  | |___| |___| |__| |\\____| \\____| |____/",
+        "  |_____\\|_____\\____/ ",
+    )
     print()
-    print(f"{red}╔══════════════════════════════════════════════════════╗{reset}")
-    print(f"{red}║{reset}                                                      {red}║{reset}")
-    print(f"{red}║{reset}   {Style.paint('4KROG', Style.BOLD)}                                              {red}║{reset}")
-    print(f"{red}║{reset}   HACK. CRACK. ATTACK.                               {red}║{reset}")
-    print(f"{red}║{reset}                                                      {red}║{reset}")
-    print(f"{red}║{reset}                  ECC ANALYZER                        {red}║{reset}")
-    print(f"{red}║{reset}       ELLIPTIC CURVE KEY ANALYSIS TOOL               {red}║{reset}")
-    print(f"{red}║{reset}                    v{VERSION:<8}                         {red}║{reset}")
-    print(f"{red}║{reset}                                                      {red}║{reset}")
-    print(f"{red}╚══════════════════════════════════════════════════════╝{reset}")
-    print(Style.paint("  LOCAL CERTIFICATE ANALYSIS · NO NETWORK OPERATIONS", Style.DIM))
+    for line in logo:
+        print(Style.paint(line, Style.RED + Style.BOLD))
+    print()
+    print(Style.paint(f"       ECC ANALYZER v{VERSION}", Style.BOLD))
+    print(Style.paint("       Elliptic Curve Key Analyzer", Style.DIM))
     print()
 
 
