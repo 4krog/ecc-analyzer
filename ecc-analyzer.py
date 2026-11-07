@@ -1,75 +1,126 @@
 #!/usr/bin/env python3
-"""Inspect X.509 EC certificates and test explicitly supplied private-key candidates."""
+"""4KROG ECC Analyzer: inspect X.509 EC certificates and test supplied candidates."""
 
 from __future__ import annotations
 
-import argparse
+import os
 import sys
-from datetime import timezone
 from pathlib import Path
+from typing import Iterable
 
 from cryptography import __version__ as cryptography_version
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import Encoding
 
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 MAX_RANGE_CANDIDATES = 100_000
+
+
+class Style:
+    """Small ANSI styling helper; no third-party terminal UI dependency."""
+
+    enabled = sys.stdout.isatty() and "NO_COLOR" not in os.environ
+
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    CYAN = "\033[96m"
+    DIM = "\033[2m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+    @classmethod
+    def paint(cls, value: str, color: str) -> str:
+        if not cls.enabled:
+            return value
+        return f"{color}{value}{cls.RESET}"
+
+
+def banner() -> None:
+    red = Style.RED
+    reset = Style.RESET
+    if not Style.enabled:
+        red = reset = ""
+    print()
+    print(f"{red}╔══════════════════════════════════════════════════════╗{reset}")
+    print(f"{red}║{reset}                                                      {red}║{reset}")
+    print(f"{red}║{reset}   {Style.paint('4KROG', Style.BOLD)}                                              {red}║{reset}")
+    print(f"{red}║{reset}   HACK. CRACK. ATTACK.                               {red}║{reset}")
+    print(f"{red}║{reset}                                                      {red}║{reset}")
+    print(f"{red}║{reset}                  ECC ANALYZER                        {red}║{reset}")
+    print(f"{red}║{reset}       ELLIPTIC CURVE KEY ANALYSIS TOOL               {red}║{reset}")
+    print(f"{red}║{reset}                    v{VERSION:<8}                         {red}║{reset}")
+    print(f"{red}║{reset}                                                      {red}║{reset}")
+    print(f"{red}╚══════════════════════════════════════════════════════╝{reset}")
+    print(Style.paint("  LOCAL CERTIFICATE ANALYSIS · NO NETWORK OPERATIONS", Style.DIM))
+    print()
+
+
+def separator() -> None:
+    print(Style.paint("─" * 58, Style.DIM))
+
+
+def pause() -> None:
+    input("\nPress Enter to continue...")
+
+
+def ask_path(prompt: str = "Certificate path: ") -> Path:
+    raw = input(prompt).strip()
+    if not raw:
+        raise ValueError("A file path is required.")
+    return Path(raw).expanduser()
 
 
 def load_certificate(path: Path) -> x509.Certificate:
     data = path.read_bytes()
     try:
         if b"-----BEGIN CERTIFICATE-----" in data:
-            return x509.load_pem_x509_certificate(data)
-        return x509.load_der_x509_certificate(data)
+            cert = x509.load_pem_x509_certificate(data)
+        else:
+            cert = x509.load_der_x509_certificate(data)
     except ValueError as exc:
         raise ValueError(f"Could not parse an X.509 certificate: {exc}") from exc
 
-
-def utc_datetime(value):
-    # cryptography >= 42 exposes timezone-aware *_utc properties.
-    return value
-
-
-def format_name(name: x509.Name) -> str:
-    return name.rfc4514_string() or "(empty)"
+    if not isinstance(cert.public_key(), ec.EllipticCurvePublicKey):
+        raise ValueError("The certificate does not contain an EC public key.")
+    return cert
 
 
-def inspect_certificate(cert: x509.Certificate) -> ec.EllipticCurvePublicKey:
+def inspect_certificate(cert: x509.Certificate, path: Path | None = None) -> ec.EllipticCurvePublicKey:
     public_key = cert.public_key()
-    print("\n=== X.509 CERTIFICATE ===")
-    print(f"Subject       : {format_name(cert.subject)}")
-    print(f"Issuer        : {format_name(cert.issuer)}")
-    print(f"Serial        : {cert.serial_number}")
-    print(f"Valid from    : {cert.not_valid_before_utc.isoformat()}")
-    print(f"Valid until   : {cert.not_valid_after_utc.isoformat()}")
-    print(f"Signature OID : {cert.signature_algorithm_oid.dotted_string}")
-
     if not isinstance(public_key, ec.EllipticCurvePublicKey):
-        raise ValueError(
-            f"Certificate public key is {public_key.__class__.__name__}, not EC."
-        )
+        raise ValueError("The certificate does not contain an EC public key.")
 
     numbers = public_key.public_numbers()
-    print(f"Public key    : Elliptic Curve")
-    print(f"Curve         : {public_key.curve.name}")
-    print(f"Key size      : {public_key.key_size} bits")
-    print(f"Public X      : {numbers.x:x}")
-    print(f"Public Y      : {numbers.y:x}")
-    print("\nNote: this displays certificate metadata; it does not assess trust or validity.")
+    separator()
+    print(Style.paint("  CERTIFICATE INSPECTION", Style.BOLD))
+    separator()
+    if path:
+        print(f"  File          : {path}")
+    print(f"  Subject       : {cert.subject.rfc4514_string() or '(empty)'}")
+    print(f"  Issuer        : {cert.issuer.rfc4514_string() or '(empty)'}")
+    print(f"  Serial        : {cert.serial_number}")
+    print(f"  Valid from    : {cert.not_valid_before_utc.isoformat()}")
+    print(f"  Valid until   : {cert.not_valid_after_utc.isoformat()}")
+    print(f"  Signature OID : {cert.signature_algorithm_oid.dotted_string}")
+    print(f"  Public key    : EC / ECDSA")
+    print(f"  Curve         : {public_key.curve.name}")
+    print(f"  Key size      : {public_key.key_size} bits")
+    print(f"  Public X      : {numbers.x:x}")
+    print(f"  Public Y      : {numbers.y:x}")
+    print(Style.paint("\n  Note: metadata display does not validate trust, hostname, or revocation.", Style.DIM))
     return public_key
 
 
 def parse_candidate(value: str) -> int:
     text = value.strip().replace("_", "")
     if not text:
-        raise ValueError("Empty candidate")
+        raise ValueError("Empty candidate.")
     try:
         number = int(text, 0) if text.lower().startswith(("0x", "+0x", "-0x")) else int(text, 10)
     except ValueError as exc:
-        raise ValueError(f"Invalid candidate {value!r}; use decimal or 0x-prefixed hex.") from exc
+        raise ValueError("Use a decimal integer or a 0x-prefixed hexadecimal value.") from exc
     if number <= 0:
         raise ValueError("A private-key candidate must be a positive integer.")
     return number
@@ -83,25 +134,38 @@ def test_candidate(public_key: ec.EllipticCurvePublicKey, candidate: int) -> boo
     return derived.public_numbers() == public_key.public_numbers()
 
 
-def check_candidates(public_key, candidates: list[int]) -> bool:
-    found = False
-    seen = set()
+def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable[int]) -> bool:
+    tested = 0
+    matches = 0
+    seen: set[int] = set()
+    print()
+    separator()
+    print(Style.paint("  CANDIDATE VERIFICATION", Style.BOLD))
+    separator()
+
     for candidate in candidates:
         if candidate in seen:
             continue
         seen.add(candidate)
+        tested += 1
         if test_candidate(public_key, candidate):
-            print(f"[MATCH] Candidate {candidate} (0x{candidate:x}) matches the certificate public key.")
-            found = True
-        else:
-            print(f"[NO MATCH] Candidate {candidate} (0x{candidate:x})")
-    if not found:
-        print("[RESULT] No supplied candidate matched.")
-    return found
+            matches += 1
+            print(Style.paint(f"  [MATCH] Candidate #{tested} matches the certificate public key.", Style.GREEN))
+        elif tested % 5000 == 0:
+            print(Style.paint(f"  Tested {tested:,} candidates...", Style.DIM))
+
+    print()
+    if matches:
+        print(Style.paint(f"  MATCH FOUND · {matches} matching candidate(s)", Style.GREEN + Style.BOLD))
+    else:
+        print(Style.paint("  NO MATCH · No supplied candidate matched.", Style.YELLOW))
+    print(f"  Candidates tested: {tested:,}")
+    print(Style.paint("  Candidate values are not echoed to the terminal.", Style.DIM))
+    return matches > 0
 
 
 def read_candidates(path: Path) -> list[int]:
-    candidates = []
+    candidates: list[int] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         value = line.split("#", 1)[0].strip()
         if not value:
@@ -110,10 +174,12 @@ def read_candidates(path: Path) -> list[int]:
             candidates.append(parse_candidate(value))
         except ValueError as exc:
             raise ValueError(f"{path}:{line_number}: {exc}") from exc
+    if not candidates:
+        raise ValueError("The candidate file contains no usable values.")
     return candidates
 
 
-def parse_range(spec: str) -> list[int]:
+def parse_range(spec: str) -> range:
     try:
         start_text, end_text = spec.split(":", 1)
         start = parse_candidate(start_text)
@@ -124,93 +190,124 @@ def parse_range(spec: str) -> list[int]:
         raise ValueError("Range END must be greater than or equal to START.")
     count = end - start + 1
     if count > MAX_RANGE_CANDIDATES:
-        raise ValueError(f"Range contains {count} values; limit is {MAX_RANGE_CANDIDATES:,}.")
-    return list(range(start, end + 1))
+        raise ValueError(f"Range contains {count:,} values; limit is {MAX_RANGE_CANDIDATES:,}.")
+    return range(start, end + 1)
 
 
-def interactive(cert_path: Path, cert: x509.Certificate, public_key) -> int:
+def load_or_reuse_certificate(current_path: Path | None, current_cert: x509.Certificate | None):
+    if current_cert is not None and current_path is not None:
+        return current_path, current_cert
+    path = ask_path()
+    cert = load_certificate(path)
+    print(Style.paint("\n  Certificate loaded successfully.", Style.GREEN))
+    return path, cert
+
+
+def guided_analysis(path: Path | None, cert: x509.Certificate | None):
+    path, cert = load_or_reuse_certificate(path, cert)
+    public_key = inspect_certificate(cert, path)
+    print("\n  Choose candidate source:")
+    print("  [1] One candidate")
+    print("  [2] Manual list (comma-separated)")
+    print("  [3] Candidate file")
+    print("  [4] Numeric range")
+    choice = input("\n  Source > ").strip()
+
+    if choice == "1":
+        candidates = [parse_candidate(input("  Candidate (decimal or 0x hex): "))]
+    elif choice == "2":
+        raw = input("  Candidates (comma-separated): ")
+        candidates = [parse_candidate(item) for item in raw.split(",") if item.strip()]
+        if not candidates:
+            raise ValueError("No candidates supplied.")
+    elif choice == "3":
+        candidate_path = ask_path("  Candidate file path: ")
+        candidates = read_candidates(candidate_path)
+    elif choice == "4":
+        candidates = parse_range(input("  Range START:END: "))
+    else:
+        raise ValueError("Unknown candidate source.")
+    check_candidates(public_key, candidates)
+    return path, cert
+
+
+def main_menu() -> int:
+    cert_path: Path | None = None
+    cert: x509.Certificate | None = None
+    banner()
+
     while True:
-        print("\n=== ECC ANALYZER ===")
-        print(f"Certificate: {cert_path}")
-        print("1) Inspect certificate")
-        print("2) Test one candidate")
-        print("3) Test candidates (comma-separated)")
-        print("4) Test a numeric range")
-        print("5) Load another certificate")
-        print("0) Exit")
-        choice = input("> ").strip()
+        print()
+        print(Style.paint("  MAIN MENU", Style.BOLD))
+        separator()
+        print("  [01] Load / inspect certificate")
+        print("  [02] Test single candidate")
+        print("  [03] Test candidate list")
+        print("  [04] Test numeric range")
+        print("  [05] Guided analysis")
+        print("  [00] Exit")
+        separator()
+        if cert_path:
+            print(Style.paint(f"  LOADED: {cert_path}", Style.GREEN))
+        else:
+            print(Style.paint("  CERTIFICATE: NOT LOADED", Style.YELLOW))
+        print(Style.paint(f"  ENGINE: Python + cryptography {cryptography_version}", Style.DIM))
+        print(Style.paint("  MODE: LOCAL ANALYSIS", Style.DIM))
+        choice = input("\n  4KROG > Select option: ").strip()
 
         try:
-            if choice == "1":
-                inspect_certificate(cert)
-            elif choice == "2":
-                candidate = parse_candidate(input("Private-key candidate (decimal or 0x hex): "))
+            if choice in ("1", "01"):
+                cert_path = ask_path() if cert is None else ask_path("Certificate path (Enter to keep current): ") if input else cert_path
+                if cert_path is None:
+                    raise ValueError("No certificate selected.")
+                cert = load_certificate(cert_path)
+                inspect_certificate(cert, cert_path)
+                pause()
+            elif choice in ("2", "02"):
+                cert_path, cert = load_or_reuse_certificate(cert_path, cert)
+                public_key = cert.public_key()
+                candidate = parse_candidate(input("  Private-key candidate (decimal or 0x hex): "))
                 check_candidates(public_key, [candidate])
-            elif choice == "3":
-                raw = input("Candidates, separated by commas: ")
-                candidates = [parse_candidate(item) for item in raw.split(",") if item.strip()]
-                if not candidates:
-                    print("[!] No candidates supplied.")
+                pause()
+            elif choice in ("3", "03"):
+                cert_path, cert = load_or_reuse_certificate(cert_path, cert)
+                public_key = cert.public_key()
+                print("  [1] Enter candidates manually")
+                print("  [2] Load candidates from file")
+                source = input("  Source > ").strip()
+                if source == "1":
+                    raw = input("  Candidates (comma-separated): ")
+                    candidates = [parse_candidate(item) for item in raw.split(",") if item.strip()]
+                    if not candidates:
+                        raise ValueError("No candidates supplied.")
+                elif source == "2":
+                    candidates = read_candidates(ask_path("  Candidate file path: "))
                 else:
-                    check_candidates(public_key, candidates)
-            elif choice == "4":
-                candidates = parse_range(input("Range START:END (for example 1:1000): "))
+                    raise ValueError("Unknown candidate source.")
                 check_candidates(public_key, candidates)
-            elif choice == "5":
-                new_path = Path(input("Certificate path: ").strip()).expanduser()
-                cert = load_certificate(new_path)
-                cert_path = new_path
-                public_key = inspect_certificate(cert)
-            elif choice == "0":
+                pause()
+            elif choice in ("4", "04"):
+                cert_path, cert = load_or_reuse_certificate(cert_path, cert)
+                candidates = parse_range(input("  Range START:END: "))
+                check_candidates(cert.public_key(), candidates)
+                pause()
+            elif choice in ("5", "05"):
+                cert_path, cert = guided_analysis(cert_path, cert)
+                pause()
+            elif choice in ("0", "00"):
+                print(Style.paint("\n  4KROG · Analysis session closed.\n", Style.DIM))
                 return 0
             else:
-                print("[!] Unknown option.")
+                print(Style.paint("  [!] Unknown option.", Style.YELLOW))
+                pause()
         except (OSError, ValueError) as exc:
-            print(f"[ERROR] {exc}")
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Inspect an X.509 EC certificate and test supplied private-key candidates."
-    )
-    parser.add_argument("certificate", type=Path, help="Certificate in PEM or DER format")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--inspect", action="store_true", help="Print certificate details")
-    group.add_argument("--key", help="Test one candidate (decimal or 0x-prefixed hexadecimal)")
-    group.add_argument("--candidates", type=Path, help="Text file with one candidate per line")
-    group.add_argument("--range", dest="candidate_range", help="Test an inclusive START:END range")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
-    return parser
-
-
-def main() -> int:
-    args = build_parser().parse_args()
-    try:
-        cert = load_certificate(args.certificate.expanduser())
-        public_key = inspect_certificate(cert) if args.inspect or not any(
-            (args.key is not None, args.candidates is not None, args.candidate_range is not None)
-        ) else cert.public_key()
-
-        if not isinstance(public_key, ec.EllipticCurvePublicKey):
-            raise ValueError("Certificate does not contain an EC public key.")
-
-        if args.inspect:
-            return 0
-        if args.key is not None:
-            matched = check_candidates(public_key, [parse_candidate(args.key)])
-            return 0 if matched else 1
-        if args.candidates is not None:
-            matched = check_candidates(public_key, read_candidates(args.candidates.expanduser()))
-            return 0 if matched else 1
-        if args.candidate_range is not None:
-            matched = check_candidates(public_key, parse_range(args.candidate_range))
-            return 0 if matched else 1
-
-        return interactive(args.certificate, cert, public_key)
-    except (OSError, ValueError) as exc:
-        print(f"[ERROR] {exc}", file=sys.stderr)
-        return 2
+            print(Style.paint(f"\n  [ERROR] {exc}", Style.RED))
+            pause()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main_menu())
+    except (KeyboardInterrupt, EOFError):
+        print("\n\n  Session interrupted. Goodbye.")
+        raise SystemExit(130)
