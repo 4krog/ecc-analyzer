@@ -237,12 +237,12 @@ def main_menu() -> int:
         print()
         print(Style.paint("  MAIN MENU", Style.BOLD))
         separator()
-        print("  [01] Load / inspect certificate")
-        print("  [02] Test single candidate")
-        print("  [03] Test candidate list")
-        print("  [04] Test numeric range")
-        print("  [05] Guided analysis")
-        print("  [00] Exit")
+        print("  [1] Load / inspect certificate")
+        print("  [2] Test single candidate")
+        print("  [3] Test candidate list")
+        print("  [4] Test numeric range")
+        print("  [5] Guided analysis")
+        print("  [0] Exit")
         separator()
         if cert_path:
             print(Style.paint(f"  LOADED: {cert_path}", Style.GREEN))
@@ -253,7 +253,7 @@ def main_menu() -> int:
         choice = input("\n  4KROG > Select option: ").strip()
 
         try:
-            if choice in ("1", "01"):
+            if choice == "1":
                 if cert is None:
                     cert_path = ask_path()
                 else:
@@ -265,13 +265,13 @@ def main_menu() -> int:
                 cert = load_certificate(cert_path)
                 inspect_certificate(cert, cert_path)
                 pause()
-            elif choice in ("2", "02"):
+            elif choice == "2":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
                 public_key = cert.public_key()
                 candidate = parse_candidate(input("  Private-key candidate (decimal or 0x hex): "))
                 check_candidates(public_key, [candidate])
                 pause()
-            elif choice in ("3", "03"):
+            elif choice == "3":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
                 public_key = cert.public_key()
                 print("  [1] Enter candidates manually")
@@ -288,15 +288,15 @@ def main_menu() -> int:
                     raise ValueError("Unknown candidate source.")
                 check_candidates(public_key, candidates)
                 pause()
-            elif choice in ("4", "04"):
+            elif choice == "4":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
                 candidates = parse_range(input("  Range START:END: "))
                 check_candidates(cert.public_key(), candidates)
                 pause()
-            elif choice in ("5", "05"):
+            elif choice == "5":
                 cert_path, cert = guided_analysis(cert_path, cert)
                 pause()
-            elif choice in ("0", "00"):
+            elif choice == "0":
                 print(Style.paint("\n  4KROG · Analysis session closed.\n", Style.DIM))
                 return 0
             else:
