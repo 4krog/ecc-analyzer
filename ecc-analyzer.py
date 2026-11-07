@@ -14,7 +14,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 MAX_RANGE_CANDIDATES = 100_000
 
 
@@ -164,7 +164,7 @@ def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable
         tested += 1
         if test_candidate(public_key, candidate):
             matches += 1
-            print(Style.paint(f"  [MATCH] Candidate #{tested} matches the certificate public key.", Style.GREEN))
+            print(Style.paint(f"  [MATCH] Candidate #{tested} matches the certificate public key.", Style.GREEN + Style.BOLD))
         elif tested % 5000 == 0:
             print(Style.paint(f"  Tested {tested:,} candidates...", Style.DIM))
 
@@ -172,7 +172,7 @@ def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable
     if matches:
         print(Style.paint(f"  MATCH FOUND · {matches} matching candidate(s)", Style.GREEN + Style.BOLD))
     else:
-        print(Style.paint("  NO MATCH · No supplied candidate matched.", Style.YELLOW))
+        print(Style.paint("  NO MATCH · No supplied candidate matched.", Style.YELLOW + Style.BOLD))
     print(f"  Candidates tested: {tested:,}")
     print(Style.paint("  Candidate values are not echoed to the terminal.", Style.DIM))
     return matches > 0
@@ -320,7 +320,7 @@ def main_menu() -> int:
                 print(Style.paint("  [!] Unknown option.", Style.YELLOW))
                 pause()
         except (OSError, ValueError) as exc:
-            print(Style.paint(f"\n  [ERROR] {exc}", Style.RED))
+            print(Style.paint(f"\n  [ERROR] {exc}", Style.RED + Style.BOLD))
             pause()
 
 
