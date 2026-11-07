@@ -164,7 +164,9 @@ def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable
         tested += 1
         if test_candidate(public_key, candidate):
             matches += 1
-            status = Style.paint("[MATCH]", Style.GREEN + Style.BOLD)\n            candidate_label = Style.paint(f"Candidate #{tested}", Style.WHITE + Style.BOLD)\n            print(f"  {status} {candidate_label} matches the certificate public key.")
+            status = Style.paint("[MATCH]", Style.GREEN + Style.BOLD)
+            candidate_label = Style.paint(f"Candidate #{tested}", Style.WHITE + Style.BOLD)
+            print(f"  {status} {candidate_label} matches the certificate public key.")
         elif tested % 5000 == 0:
             print(Style.paint(f"  Tested {tested:,} candidates...", Style.DIM))
 
