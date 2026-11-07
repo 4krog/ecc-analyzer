@@ -2,7 +2,7 @@
 
 A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
 
-**Version:** 1.1.1
+**Version:** 1.1.2
 
 ## What it does
 
