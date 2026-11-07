@@ -13,7 +13,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 MAX_RANGE_CANDIDATES = 100_000
 
 
@@ -62,11 +62,16 @@ def pause() -> None:
     input("\nPress Enter to continue...")
 
 
+def normalize_path(raw: str) -> Path:
+    """Expand ~ and resolve relative paths from the current working directory."""
+    return Path(raw.strip()).expanduser().resolve()
+
+
 def ask_path(prompt: str = "Certificate path: ") -> Path:
     raw = input(prompt).strip()
     if not raw:
         raise ValueError("A file path is required.")
-    return Path(raw).expanduser()
+    return normalize_path(raw)
 
 
 def load_certificate(path: Path) -> x509.Certificate:
@@ -259,7 +264,7 @@ def main_menu() -> int:
                 else:
                     replacement_path = input("  Certificate path (Enter to keep current): ").strip()
                     if replacement_path:
-                        cert_path = Path(replacement_path).expanduser()
+                        cert_path = normalize_path(replacement_path)
                 if cert_path is None:
                     raise ValueError("No certificate selected.")
                 cert = load_certificate(cert_path)
