@@ -2,7 +2,7 @@
 
 A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 
 ## What it does
 
@@ -51,6 +51,8 @@ python ecc-analyzer.py
 The menu lets you:
 
 1. Load and inspect a PEM or DER certificate.
+
+File prompts accept absolute paths, relative paths, and paths beginning with `~/`. Relative paths are resolved from the directory where you launched the program (the current working directory), not from the location of the script.
 2. Test one decimal or hexadecimal candidate.
 3. Test a comma-separated manual list or load candidates from a text file.
 4. Test an inclusive numeric range.
