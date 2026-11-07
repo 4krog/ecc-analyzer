@@ -2,7 +2,7 @@
 
 A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
 
-**Version:** 1.1.2
+**Version:** 1.1.3
 
 ## What it does
 
@@ -64,7 +64,7 @@ Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent 
 
 ## Terminal presentation
 
-The interface uses standard ANSI terminal colors when output is connected to a terminal. Set `NO_COLOR` to disable color output. No third-party terminal UI library is used.
+The interface uses standard ANSI terminal colors when output is connected to a terminal. Successful matches are highlighted in bold green, non-matches in bold yellow, and errors in bold red. Set `NO_COLOR` to disable color output. No third-party terminal UI library is used.
 
 ## Security and responsible use
 
