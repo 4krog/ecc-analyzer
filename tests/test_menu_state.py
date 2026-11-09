@@ -143,6 +143,42 @@ class MainMenuStateTests(unittest.TestCase):
             list(profile.dns_names),
         )
         self.assertFalse(issued.extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
+
+        # The generated server key must match the public key embedded in the leaf.
+        server_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+        self.assertEqual(
+            server_key.public_key().public_numbers(),
+            issued.public_key().public_numbers(),
+        )
+
+        # The CSR must be valid and request the same public key and DNS names.
+        csr = x509.load_pem_x509_csr(csr_path.read_bytes())
+        self.assertTrue(csr.is_signature_valid)
+        self.assertEqual(csr.public_key().public_numbers(), issued.public_key().public_numbers())
+        self.assertEqual(
+            csr.extensions.get_extension_for_class(x509.SubjectAlternativeName).value.get_values_for_type(x509.DNSName),
+            list(profile.dns_names),
+        )
+
+        # Check TLS server usage and the leaf's validity window.
+        eku = issued.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+        self.assertIn(x509.oid.ExtendedKeyUsageOID.SERVER_AUTH, eku)
+        usage = issued.extensions.get_extension_for_class(x509.KeyUsage).value
+        self.assertTrue(usage.digital_signature)
+        self.assertTrue(usage.key_encipherment is False)
+        self.assertFalse(usage.key_cert_sign)
+        self.assertLessEqual(issued.not_valid_after_utc, self.cert.not_valid_after_utc)
+        self.assertLessEqual(
+            issued.not_valid_after_utc - issued.not_valid_before_utc,
+            timedelta(days=profile.validity_days, minutes=5),
+        )
+
+        # fullchain.pem must contain leaf first, followed by the supplied intermediate.
+        chain = x509.load_pem_x509_certificates(fullchain_path.read_bytes())
+        self.assertEqual(len(chain), 2)
+        self.assertEqual(chain[0].fingerprint(hashes.SHA256()), issued.fingerprint(hashes.SHA256()))
+        self.assertEqual(chain[1].fingerprint(hashes.SHA256()), self.cert.fingerprint(hashes.SHA256()))
+
         self.assertEqual(key_path.stat().st_mode & 0o777, 0o600)
         self.assertIn("CERTIFICATE CREATED AND SIGNATURE VERIFIED", output)
 
