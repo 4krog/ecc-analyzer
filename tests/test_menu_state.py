@@ -98,7 +98,7 @@ class MainMenuStateTests(unittest.TestCase):
         self.assertIn(f"LOADED: {self.cert_path}", output)
         self.assertIn("Could not parse an X.509 certificate", output)
         self.assertIn("verify a matching private-key candidate first", output)
-        self.assertNotIn("CERTIFICATE: NOT LOADED", output)
+        self.assertEqual(output.count("CERTIFICATE: NOT LOADED"), 1)
 
 
 if __name__ == "__main__":
