@@ -218,8 +218,8 @@ def generate_server_certificate(
     try:
         for label, path in paths.items():
             with path.open("xb") as output:
+                created.append(path)
                 output.write(payloads[label])
-            created.append(path)
         paths["key"].chmod(0o600)
     except OSError:
         for path in created:
