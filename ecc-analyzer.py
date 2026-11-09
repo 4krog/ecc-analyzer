@@ -303,7 +303,7 @@ def main_menu() -> int:
         print("  [6] Generate proof-of-impact certificate")
         print("  [0] Exit")
         separator()
-        if cert_path:
+        if cert is not None and cert_path is not None:
             print(Style.paint(f"  LOADED: {cert_path}", Style.GREEN))
         else:
             print(Style.paint("  CERTIFICATE: NOT LOADED", Style.YELLOW))
@@ -318,18 +318,25 @@ def main_menu() -> int:
         try:
             if choice == "1":
                 if cert is None:
-                    cert_path = ask_path()
+                    replacement_path = ask_path()
                 else:
-                    replacement_path = input("  Certificate path (Enter to keep current): ").strip()
-                    if replacement_path:
-                        cert_path = normalize_path(replacement_path)
-                if cert_path is None:
-                    raise ValueError("No certificate selected.")
-                # Invalidate the previous match before attempting to load a replacement.
+                    replacement_raw = input("  Certificate path (Enter to keep current): ").strip()
+                    if not replacement_raw:
+                        inspect_certificate(cert, cert_path)
+                        pause()
+                        continue
+                    replacement_path = normalize_path(replacement_raw)
+
+                # A new certificate selection invalidates the previous match.
                 verified_scalar = None
-                cert = None
-                cert = load_certificate(cert_path)
-                inspect_certificate(cert, cert_path)
+
+                # Load and inspect before committing the replacement.
+                replacement_cert = load_certificate(replacement_path)
+                inspect_certificate(replacement_cert, replacement_path)
+
+                cert_path = replacement_path
+                cert = replacement_cert
+                print(Style.paint("\n  Certificate loaded successfully.", Style.GREEN))
                 pause()
             elif choice == "2":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
