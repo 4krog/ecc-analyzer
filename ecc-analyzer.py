@@ -13,8 +13,10 @@ from cryptography import __version__ as cryptography_version
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from certificate_generator import generate_server_certificate, load_profile
 
-VERSION = "1.1.5"
+
+VERSION = "1.2.0"
 MAX_RANGE_CANDIDATES = 100_000
 
 
@@ -149,9 +151,10 @@ def test_candidate(public_key: ec.EllipticCurvePublicKey, candidate: int) -> boo
     return derived.public_numbers() == public_key.public_numbers()
 
 
-def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable[int]) -> bool:
+def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable[int]) -> int | None:
     tested = 0
     matches = 0
+    matching_scalar: int | None = None
     seen: set[int] = set()
     print()
     separator()
@@ -165,6 +168,8 @@ def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable
         tested += 1
         if test_candidate(public_key, candidate):
             matches += 1
+            if matching_scalar is None:
+                matching_scalar = candidate
             status = Style.paint("[MATCH]", Style.GREEN + Style.BOLD)
             candidate_label = Style.paint(f"Candidate #{tested}", Style.WHITE + Style.BOLD)
             private_key = Style.paint(str(candidate), Style.RED + Style.BOLD)
@@ -179,7 +184,7 @@ def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable
         print(Style.paint("  NO MATCH · No supplied candidate matched.", Style.YELLOW + Style.BOLD))
     print(f"  Candidates tested: {tested:,}")
     print(Style.paint("  Only matching candidate values are displayed.", Style.DIM))
-    return matches > 0
+    return matching_scalar
 
 
 def read_candidates(path: Path) -> list[int]:
@@ -245,13 +250,45 @@ def guided_analysis(path: Path | None, cert: x509.Certificate | None):
         candidates = parse_range(input("  Range START:END: "))
     else:
         raise ValueError("Unknown candidate source.")
-    check_candidates(public_key, candidates)
-    return path, cert
+    matching_scalar = check_candidates(public_key, candidates)
+    return path, cert, matching_scalar
+
+
+def generate_certificate_interactive(cert: x509.Certificate, private_scalar: int) -> None:
+    profile = load_profile()
+    print()
+    separator()
+    print(Style.paint("  PROOF-OF-IMPACT CERTIFICATE", Style.BOLD))
+    separator()
+    print(f"  Lab profile   : {profile.name}")
+    print(f"  Issuer        : {cert.subject.rfc4514_string()} (taken from loaded CA certificate)")
+    subject_cn = input(f"  Subject CN [{profile.subject_cn}]: ").strip() or profile.subject_cn
+    default_names = ", ".join(profile.dns_names)
+    raw_names = input(f"  SAN DNS names [{default_names}]: ").strip() or default_names
+    dns_names = [item.strip() for item in raw_names.split(",") if item.strip()]
+    raw_days = input(f"  Validity days [{profile.validity_days}]: ").strip()
+    validity_days = int(raw_days) if raw_days else profile.validity_days
+    output_raw = input("  Output directory [player-output]: ").strip() or "player-output"
+    paths = generate_server_certificate(
+        intermediate=cert,
+        private_scalar=private_scalar,
+        subject_cn=subject_cn,
+        dns_names=dns_names,
+        validity_days=validity_days,
+        output_dir=normalize_path(output_raw),
+        allowed_dns_suffixes=profile.allowed_dns_suffixes,
+    )
+    print(Style.paint("\n  CERTIFICATE CREATED AND SIGNATURE VERIFIED", Style.GREEN + Style.BOLD))
+    for label, path in paths.items():
+        print(f"  {label:12}: {path}")
+    print(Style.paint("  Note: this verifies the issued certificate signature, not client trust, hostname validation, or revocation.", Style.DIM))
+    print(Style.paint("  The generated server private key is unencrypted; protect and delete it after the lab.", Style.YELLOW))
 
 
 def main_menu() -> int:
     cert_path: Path | None = None
     cert: x509.Certificate | None = None
+    verified_scalar: int | None = None
     banner()
 
     while True:
@@ -263,6 +300,7 @@ def main_menu() -> int:
         print("  [3] Test candidate list")
         print("  [4] Test numeric range")
         print("  [5] Guided analysis")
+        print("  [6] Generate proof-of-impact certificate")
         print("  [0] Exit")
         separator()
         if cert_path:
@@ -284,13 +322,14 @@ def main_menu() -> int:
                 if cert_path is None:
                     raise ValueError("No certificate selected.")
                 cert = load_certificate(cert_path)
+                verified_scalar = None
                 inspect_certificate(cert, cert_path)
                 pause()
             elif choice == "2":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
                 public_key = cert.public_key()
                 candidate = parse_candidate(input("  Private-key candidate (decimal or 0x hex): "))
-                check_candidates(public_key, [candidate])
+                verified_scalar = check_candidates(public_key, [candidate])
                 pause()
             elif choice == "3":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
@@ -307,15 +346,22 @@ def main_menu() -> int:
                     candidates = read_candidates(ask_path("  Candidate file path: "))
                 else:
                     raise ValueError("Unknown candidate source.")
-                check_candidates(public_key, candidates)
+                verified_scalar = check_candidates(public_key, candidates)
                 pause()
             elif choice == "4":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
                 candidates = parse_range(input("  Range START:END: "))
-                check_candidates(cert.public_key(), candidates)
+                verified_scalar = check_candidates(cert.public_key(), candidates)
                 pause()
             elif choice == "5":
-                cert_path, cert = guided_analysis(cert_path, cert)
+                cert_path, cert, verified_scalar = guided_analysis(cert_path, cert)
+                pause()
+            elif choice == "6":
+                if cert is None:
+                    raise ValueError("Load an intermediate CA certificate first.")
+                if verified_scalar is None:
+                    raise ValueError("Certificate generation is locked: verify a matching private-key candidate first.")
+                generate_certificate_interactive(cert, verified_scalar)
                 pause()
             elif choice == "0":
                 print(Style.paint("\n  4KROG · Analysis session closed.\n", Style.DIM))
