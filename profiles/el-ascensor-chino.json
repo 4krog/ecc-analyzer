@@ -1,0 +1,13 @@
+{
+  "name": "El ascensor chino",
+  "subject_cn": "banco.4krog.test",
+  "dns_names": [
+    "banco.4krog.test",
+    "www.banco.4krog.test",
+    "api.banco.4krog.test"
+  ],
+  "validity_days": 7,
+  "allowed_dns_suffixes": [
+    ".4krog.test"
+  ]
+}
