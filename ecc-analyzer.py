@@ -309,6 +309,10 @@ def main_menu() -> int:
             print(Style.paint("  CERTIFICATE: NOT LOADED", Style.YELLOW))
         print(Style.paint(f"  ENGINE: Python + cryptography {cryptography_version}", Style.DIM))
         print(Style.paint("  MODE: LOCAL ANALYSIS", Style.DIM))
+        if verified_scalar is not None:
+            print(Style.paint("  VERIFIED CANDIDATE: AVAILABLE FOR THIS CERTIFICATE", Style.GREEN))
+        else:
+            print(Style.paint("  VERIFIED CANDIDATE: NONE", Style.DIM))
         choice = input("\n  4KROG > Select option: ").strip()
 
         try:
@@ -328,12 +332,14 @@ def main_menu() -> int:
             elif choice == "2":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
                 public_key = cert.public_key()
+                verified_scalar = None
                 candidate = parse_candidate(input("  Private-key candidate (decimal or 0x hex): "))
                 verified_scalar = check_candidates(public_key, [candidate])
                 pause()
             elif choice == "3":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
                 public_key = cert.public_key()
+                verified_scalar = None
                 print("  [1] Enter candidates manually")
                 print("  [2] Load candidates from file")
                 source = input("  Source > ").strip()
@@ -350,10 +356,12 @@ def main_menu() -> int:
                 pause()
             elif choice == "4":
                 cert_path, cert = load_or_reuse_certificate(cert_path, cert)
+                verified_scalar = None
                 candidates = parse_range(input("  Range START:END: "))
                 verified_scalar = check_candidates(cert.public_key(), candidates)
                 pause()
             elif choice == "5":
+                verified_scalar = None
                 cert_path, cert, verified_scalar = guided_analysis(cert_path, cert)
                 pause()
             elif choice == "6":
