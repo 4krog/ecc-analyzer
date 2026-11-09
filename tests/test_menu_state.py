@@ -3,6 +3,7 @@ import importlib.util
 import io
 import tempfile
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -99,6 +100,52 @@ class MainMenuStateTests(unittest.TestCase):
         self.assertIn("Could not parse an X.509 certificate", output)
         self.assertIn("verify a matching private-key candidate first", output)
         self.assertEqual(output.count("CERTIFICATE: NOT LOADED"), 1)
+
+
+    def test_menu_generates_real_proof_of_impact_certificate(self):
+        output_dir = self.root / "proof-of-impact"
+        profile = SimpleNamespace(
+            name="El ascensor chino",
+            subject_cn="banco.4krog.test",
+            dns_names=(
+                "banco.4krog.test",
+                "www.banco.4krog.test",
+                "api.banco.4krog.test",
+            ),
+            validity_days=7,
+            allowed_dns_suffixes=(".4krog.test",),
+        )
+        inputs = [
+            "1", str(self.cert_path), "",  # load intermediate CA
+            "2", str(self.scalar), "",     # verify matching CA scalar
+            "6", "", "", "", str(output_dir), "",  # generate with profile defaults
+            "0",
+        ]
+        with patch.object(ecc_analyzer, "load_profile", return_value=profile):
+            output = self.run_menu(inputs)
+
+        certificate_path = output_dir / "server.crt"
+        key_path = output_dir / "server.key"
+        csr_path = output_dir / "server.csr"
+        fullchain_path = output_dir / "fullchain.pem"
+        for path in (certificate_path, key_path, csr_path, fullchain_path):
+            self.assertTrue(path.is_file(), f"Expected generated file: {path}")
+
+        issued = x509.load_pem_x509_certificate(certificate_path.read_bytes())
+        self.cert.public_key().verify(
+            issued.signature,
+            issued.tbs_certificate_bytes,
+            ec.ECDSA(issued.signature_hash_algorithm),
+        )
+        self.assertEqual(issued.issuer, self.cert.subject)
+        self.assertEqual(
+            issued.extensions.get_extension_for_class(x509.SubjectAlternativeName).value.get_values_for_type(x509.DNSName),
+            list(profile.dns_names),
+        )
+        self.assertFalse(issued.extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
+        self.assertEqual(key_path.stat().st_mode & 0o777, 0o600)
+        self.assertIn("CERTIFICATE CREATED AND SIGNATURE VERIFIED", output)
+
 
 
 if __name__ == "__main__":
