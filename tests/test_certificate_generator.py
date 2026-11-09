@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from certificate_generator import generate_server_certificate, validate_dns_names
+from certificate_generator import generate_server_certificate, load_profile, validate_dns_names
 
 
 def make_intermediate():
@@ -35,6 +35,14 @@ def make_intermediate():
 
 
 class CertificateGeneratorTests(unittest.TestCase):
+    def test_default_lab_profile(self):
+        profile = load_profile()
+        self.assertEqual(profile.subject_cn, "banco.4krog.test")
+        self.assertEqual(profile.dns_names, (
+            "banco.4krog.test", "www.banco.4krog.test", "api.banco.4krog.test"
+        ))
+        self.assertEqual(profile.allowed_dns_suffixes, (".4krog.test",))
+
     def test_dns_scope_rejects_outside_domain(self):
         with self.assertRaises(ValueError):
             validate_dns_names(["attacker.example"], (".4krog.test",))
@@ -64,6 +72,11 @@ class CertificateGeneratorTests(unittest.TestCase):
                 ec.ECDSA(issued.signature_hash_algorithm),
             )
             self.assertEqual(issued.issuer, intermediate.subject)
+            self.assertEqual(
+                issued.extensions.get_extension_for_class(x509.SubjectAlternativeName).value.get_values_for_type(x509.DNSName),
+                ["banco.4krog.test", "www.banco.4krog.test"],
+            )
+            self.assertFalse(issued.extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
             self.assertEqual(paths["key"].stat().st_mode & 0o777, 0o600)
             with self.assertRaises(FileExistsError):
                 generate_server_certificate(
