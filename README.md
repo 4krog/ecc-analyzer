@@ -2,7 +2,7 @@
 
 A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
 
-**Version:** 1.1.5
+**Version:** 1.2.0
 
 ## What it does
 
@@ -11,6 +11,7 @@ A lightweight interactive terminal utility to inspect X.509 certificates contain
 - Tests one candidate, a manually entered list, a candidate file, or a bounded numeric range.
 - Derives the public point for each candidate on the certificate's curve and compares it with the certificate public key.
 - Starts directly in an interactive terminal menu: no command-line arguments are required.
+- After a supplied candidate matches the loaded EC public key, can issue a lab-scoped TLS server certificate using that verified scalar.
 - Uses Python's standard library for the terminal interface and `cryptography` for cryptographic operations. No additional UI packages are required.
 
 ## What it does not do
@@ -18,7 +19,7 @@ A lightweight interactive terminal utility to inspect X.509 certificates contain
 - It does not recover arbitrary private keys or break ECDSA/ECC.
 - It does not brute-force the full key space.
 - It does not connect to remote hosts, scan networks, or exploit services.
-- It does not validate certificate trust chains, revocation status, or hostname matching.
+- It does not automatically validate a complete certificate trust chain, revocation status, or hostname matching.
 
 A match means only that the supplied integer derives the public key contained in the certificate. This demonstrates the danger of weak, predictable, or improperly generated private keys; it does not imply a weakness in the elliptic curve itself.
 
@@ -57,10 +58,30 @@ File prompts accept absolute paths, relative paths, and paths beginning with `~/
 3. Test a comma-separated manual list or load candidates from a text file.
 4. Test an inclusive numeric range.
 5. Run a guided analysis session.
+6. After a successful candidate match, generate a proof-of-impact TLS certificate signed by the loaded intermediate CA.
 
 Candidate files accept one decimal or `0x`-prefixed hexadecimal value per line. Blank lines and comments beginning with `#` are ignored.
 
 Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent accidental oversized runs.
+
+## Proof-of-impact certificate generation
+
+Option 6 is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained only in the running process and is not exported.
+
+The initial lab profile is `profiles/el-ascensor-chino.json`. It pre-fills:
+
+- Subject CN: `banco.4krog.test`
+- SAN DNS names: `banco.4krog.test`, `www.banco.4krog.test`, and `api.banco.4krog.test`
+- Validity: 7 days
+- Allowed DNS suffix: `.4krog.test`
+
+These values can be edited in the interactive prompts. DNS names must remain within the suffix configured by the selected profile. To use another authorized lab namespace, edit or add a profile and configure its defaults and allowed suffixes. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
+
+The generator checks that the loaded certificate is a currently valid CA with `BasicConstraints CA:TRUE` and `KeyUsage keyCertSign`, verifies the candidate scalar against its EC public key, creates a separate server key and CSR, and verifies the issued certificate signature before writing output. It refuses to overwrite existing output files.
+
+The output directory contains `server.key`, `server.csr`, `server.crt`, and `fullchain.pem`. The server private key is unencrypted PEM protected with filesystem mode `0600`; protect it as a secret. The generated full chain contains the leaf certificate and intermediate certificate, not the root certificate.
+
+**Important:** successful signature verification does not mean a browser or operating system will trust the certificate. Trust-store installation, hostname validation, chain construction, validity, and revocation must be tested separately in the authorized lab.
 
 ## Terminal presentation
 
