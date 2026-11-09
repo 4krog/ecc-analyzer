@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
@@ -59,7 +59,7 @@ class MainMenuStateTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.scalar, self.cert = make_intermediate()
         self.cert_path = self.root / "intermediate.pem"
-        self.cert_path.write_bytes(self.cert.public_bytes(x509.Encoding.PEM) if hasattr(x509, "Encoding") else self.cert.public_bytes(__import__("cryptography").hazmat.primitives.serialization.Encoding.PEM))
+        self.cert_path.write_bytes(self.cert.public_bytes(serialization.Encoding.PEM))
 
     def run_menu(self, inputs):
         output = io.StringIO()
