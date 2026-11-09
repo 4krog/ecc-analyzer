@@ -75,13 +75,23 @@ The initial lab profile is `profiles/el-ascensor-chino.json`. It pre-fills:
 - Validity: 7 days
 - Allowed DNS suffix: `.4krog.test`
 
-These values can be edited in the interactive prompts. DNS names must remain within the suffix configured by the selected profile. To use another authorized lab namespace, edit or add a profile and configure its defaults and allowed suffixes. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
+These values can be edited in the interactive prompts. DNS names must remain within the suffix configured by the selected profile. To use another authorized lab namespace with this build, edit this profile's defaults and allowed suffixes. The application currently loads this bundled profile by default. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
 
 The generator checks that the loaded certificate is a currently valid CA with `BasicConstraints CA:TRUE` and `KeyUsage keyCertSign`, verifies the candidate scalar against its EC public key, creates a separate server key and CSR, and verifies the issued certificate signature before writing output. It refuses to overwrite existing output files.
 
 The output directory contains `server.key`, `server.csr`, `server.crt`, and `fullchain.pem`. The server private key is unencrypted PEM protected with filesystem mode `0600`; protect it as a secret. The generated full chain contains the leaf certificate and intermediate certificate, not the root certificate.
 
 **Important:** successful signature verification does not mean a browser or operating system will trust the certificate. Trust-store installation, hostname validation, chain construction, validity, and revocation must be tested separately in the authorized lab.
+
+## Tests
+
+Run the regression tests from the repository root:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The tests create temporary EC CA certificates and temporary output files; they do not use production certificates or contact network services.
 
 ## Terminal presentation
 
