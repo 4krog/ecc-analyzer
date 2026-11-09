@@ -325,8 +325,10 @@ def main_menu() -> int:
                         cert_path = normalize_path(replacement_path)
                 if cert_path is None:
                     raise ValueError("No certificate selected.")
-                cert = load_certificate(cert_path)
+                # Invalidate the previous match before attempting to load a replacement.
                 verified_scalar = None
+                cert = None
+                cert = load_certificate(cert_path)
                 inspect_certificate(cert, cert_path)
                 pause()
             elif choice == "2":
