@@ -1,9 +1,11 @@
 import json
+import os
 import shutil
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -13,11 +15,11 @@ from cryptography.x509.oid import NameOID
 from certificate_generator import generate_server_certificate, load_profile, validate_dns_names
 
 
-def make_intermediate():
+def make_intermediate(eku=None):
     key = ec.generate_private_key(ec.SECP384R1())
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "4KROG Intermediate CA")])
     now = datetime.now(timezone.utc)
-    cert = (
+    builder = (
         x509.CertificateBuilder()
         .subject_name(subject)
         .issuer_name(subject)
@@ -31,9 +33,10 @@ def make_intermediate():
             data_encipherment=False, key_agreement=False, key_cert_sign=True,
             crl_sign=True, encipher_only=None, decipher_only=None,
         ), critical=True)
-        .sign(key, hashes.SHA384())
     )
-    return key, cert
+    if eku is not None:
+        builder = builder.add_extension(x509.ExtendedKeyUsage(eku), critical=False)
+    return key, builder.sign(key, hashes.SHA384())
 
 
 class CertificateGeneratorTests(unittest.TestCase):
@@ -155,15 +158,18 @@ class CertificateGeneratorTests(unittest.TestCase):
         ca_key, intermediate = make_intermediate()
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp) / "output"
-            paths = generate_server_certificate(
-                intermediate=intermediate,
-                private_scalar=ca_key.private_numbers().private_value,
-                subject_cn="banco.4krog.test",
-                dns_names=["banco.4krog.test", "www.banco.4krog.test"],
-                validity_days=7,
-                output_dir=output,
-                allowed_dns_suffixes=(".4krog.test",),
-            )
+            with mock.patch("ecc_analyzer.certificates.issuer.os.open", wraps=os.open) as open_file:
+                paths = generate_server_certificate(
+                    intermediate=intermediate,
+                    private_scalar=ca_key.private_numbers().private_value,
+                    subject_cn="banco.4krog.test",
+                    dns_names=["banco.4krog.test", "www.banco.4krog.test"],
+                    validity_days=7,
+                    output_dir=output,
+                    allowed_dns_suffixes=(".4krog.test",),
+                )
+            key_open = next(call for call in open_file.call_args_list if Path(call.args[0]) == paths["key"])
+            self.assertEqual(key_open.args[2], 0o600)
             issued = x509.load_pem_x509_certificate(paths["certificate"].read_bytes())
             ca_key.public_key().verify(
                 issued.signature, issued.tbs_certificate_bytes,
@@ -182,6 +188,43 @@ class CertificateGeneratorTests(unittest.TestCase):
                     "banco.4krog.test", ["banco.4krog.test"], 7,
                     output, (".4krog.test",),
                 )
+
+
+    def test_ca_eku_must_permit_tls_server_authentication(self):
+        client_only = [x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH]
+        ca_key, restricted_ca = make_intermediate(eku=client_only)
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(ValueError, "EKU does not permit TLS server authentication"):
+                generate_server_certificate(
+                    restricted_ca, ca_key.private_numbers().private_value,
+                    "banco.4krog.test", ["banco.4krog.test"], 7,
+                    Path(temp) / "rejected", (".4krog.test",),
+                )
+
+    def test_ca_eku_server_auth_and_any_eku_are_accepted(self):
+        allowed_ekus = (
+            [x509.oid.ExtendedKeyUsageOID.SERVER_AUTH],
+            [x509.oid.ExtendedKeyUsageOID.ANY_EXTENDED_KEY_USAGE],
+        )
+        for index, eku in enumerate(allowed_ekus):
+            ca_key, permitted_ca = make_intermediate(eku=eku)
+            with tempfile.TemporaryDirectory() as temp:
+                result = generate_server_certificate(
+                    permitted_ca, ca_key.private_numbers().private_value,
+                    "banco.4krog.test", ["banco.4krog.test"], 7,
+                    Path(temp) / f"accepted-{index}", (".4krog.test",),
+                )
+                self.assertTrue(result["certificate"].is_file())
+
+    def test_ca_without_eku_remains_usable(self):
+        ca_key, unrestricted_ca = make_intermediate()
+        with tempfile.TemporaryDirectory() as temp:
+            result = generate_server_certificate(
+                unrestricted_ca, ca_key.private_numbers().private_value,
+                "banco.4krog.test", ["banco.4krog.test"], 7,
+                Path(temp) / "no-eku", (".4krog.test",),
+            )
+            self.assertTrue(result["certificate"].is_file())
 
     def test_public_issuer_rejects_boolean_and_float_numeric_inputs(self):
         ca_key, intermediate = make_intermediate()
