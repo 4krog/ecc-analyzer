@@ -49,11 +49,23 @@ class Style:
 
 
 def banner() -> None:
+    logo = (
+        "             .-''''-.",
+        "          .-'  .--.  '-.",
+        "        .'    /    \\    '.",
+        "       /     |  o   |     \\",
+        "      ;       \\    /       ;",
+        "       \\       '--'       /",
+        "        '.              .'",
+        "          '-.________.-'",
+    )
     print()
-    print(Style.paint("ECC Analyzer", Style.WHITE + Style.BOLD))
-    print(Style.paint("BY 4KROG", Style.RED + Style.BOLD))
-    print(Style.paint("Elliptic Curve Cryptography & Certificate Toolkit", Style.DIM))
-    print(Style.paint(f"Version {VERSION}", Style.DIM))
+    for line in logo:
+        print(Style.paint(line, Style.RED + Style.BOLD))
+    print(Style.paint("             ECC ANALYZER", Style.WHITE + Style.BOLD))
+    print(Style.paint("                 BY 4KROG", Style.RED + Style.BOLD))
+    print(Style.paint("  Elliptic Curve Cryptography & Certificate Toolkit", Style.DIM))
+    print(Style.paint(f"                         Version {VERSION}", Style.DIM))
     print()
 
 
