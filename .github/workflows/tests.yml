@@ -45,9 +45,45 @@ jobs:
       - name: Verify source-checkout compatibility launcher
         run: python ecc-analyzer.py --help
 
-      - name: Build wheel and verify installed package outside checkout
+      - name: Build wheel and source distribution
         run: |
-          python -m pip wheel . --no-deps --wheel-dir dist
+          python -m pip install build
+          python -m build --sdist --wheel --outdir dist
+
+      - name: Verify distribution contents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          wheel = next(Path("dist").glob("*.whl"))
+          with zipfile.ZipFile(wheel) as archive:
+              wheel_files = archive.namelist()
+          assert any(
+              name.endswith(".dist-info/licenses/LICENSE") or name == "LICENSE"
+              for name in wheel_files
+          ), "MIT license is missing from the wheel"
+          assert any(
+              name.endswith("ecc_analyzer/certificates/profiles/default.json")
+              for name in wheel_files
+          ), "Bundled default profile is missing from the wheel"
+
+          source = next(Path("dist").glob("*.tar.gz"))
+          with tarfile.open(source, "r:gz") as archive:
+              source_files = archive.getnames()
+          assert any(Path(name).name == "LICENSE" for name in source_files), (
+              "MIT license is missing from the source distribution"
+          )
+          assert any(
+              name.endswith("ecc_analyzer/certificates/profiles/default.json")
+              for name in source_files
+          ), "Bundled default profile is missing from the source distribution"
+          print("Wheel and source distribution contents: OK")
+          PY
+
+      - name: Verify installed package outside checkout
+        run: |
           python -m venv /tmp/ecc-analyzer-venv
           /tmp/ecc-analyzer-venv/bin/python -m pip install dist/*.whl
           cd /tmp
