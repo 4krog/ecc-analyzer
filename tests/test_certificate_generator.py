@@ -136,6 +136,29 @@ class CertificateGeneratorTests(unittest.TestCase):
                     output, (".4krog.test",),
                 )
 
+    def test_public_issuer_rejects_boolean_and_float_numeric_inputs(self):
+        ca_key, intermediate = make_intermediate()
+        scalar = ca_key.private_numbers().private_value
+        with tempfile.TemporaryDirectory() as temp:
+            for invalid_scalar in (True, 1.5):
+                with self.subTest(private_scalar=invalid_scalar), self.assertRaisesRegex(
+                    ValueError, "private scalar must be a positive integer"
+                ):
+                    generate_server_certificate(
+                        intermediate, invalid_scalar, "banco.4krog.test",
+                        ["banco.4krog.test"], 7, Path(temp) / "scalar",
+                        (".4krog.test",),
+                    )
+            for invalid_days in (True, 7.5):
+                with self.subTest(validity_days=invalid_days), self.assertRaisesRegex(
+                    ValueError, "Validity must be an integer"
+                ):
+                    generate_server_certificate(
+                        intermediate, scalar, "banco.4krog.test",
+                        ["banco.4krog.test"], invalid_days, Path(temp) / "days",
+                        (".4krog.test",),
+                    )
+
     def test_wrong_scalar_is_rejected(self):
         _, intermediate = make_intermediate()
         with tempfile.TemporaryDirectory() as temp:
