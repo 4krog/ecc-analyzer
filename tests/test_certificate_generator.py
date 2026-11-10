@@ -239,43 +239,85 @@ class CertificateGeneratorTests(unittest.TestCase):
     def test_openssl_validates_trusted_tls_chain_and_rejects_wrong_hostname(self):
         import subprocess
 
-        ca_key, intermediate = make_intermediate()
+        # Build a real two-CA hierarchy: trusted root -> intermediate -> TLS leaf.
+        root_key = ec.generate_private_key(ec.SECP384R1())
+        intermediate_key = ec.generate_private_key(ec.SECP384R1())
+        now = datetime.now(timezone.utc)
+        root_subject = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "4KROG Test Root CA")
+        ])
+        intermediate_subject = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "4KROG Test Intermediate CA")
+        ])
+
+        root = (
+            x509.CertificateBuilder()
+            .subject_name(root_subject)
+            .issuer_name(root_subject)
+            .public_key(root_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before((now - timedelta(days=1)).replace(tzinfo=None))
+            .not_valid_after((now + timedelta(days=30)).replace(tzinfo=None))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=1), critical=True)
+            .add_extension(x509.KeyUsage(
+                digital_signature=True, content_commitment=False, key_encipherment=False,
+                data_encipherment=False, key_agreement=False, key_cert_sign=True,
+                crl_sign=True, encipher_only=None, decipher_only=None,
+            ), critical=True)
+            .sign(root_key, hashes.SHA384())
+        )
+        intermediate = (
+            x509.CertificateBuilder()
+            .subject_name(intermediate_subject)
+            .issuer_name(root.subject)
+            .public_key(intermediate_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before((now - timedelta(hours=12)).replace(tzinfo=None))
+            .not_valid_after((now + timedelta(days=14)).replace(tzinfo=None))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+            .add_extension(x509.KeyUsage(
+                digital_signature=True, content_commitment=False, key_encipherment=False,
+                data_encipherment=False, key_agreement=False, key_cert_sign=True,
+                crl_sign=True, encipher_only=None, decipher_only=None,
+            ), critical=True)
+            .sign(root_key, hashes.SHA384())
+        )
+
         with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            ca_path = root / "lab-ca.pem"
-            ca_path.write_bytes(intermediate.public_bytes(serialization.Encoding.PEM))
+            directory = Path(temp)
+            root_path = directory / "root.pem"
+            intermediate_path = directory / "intermediate.pem"
+            root_path.write_bytes(root.public_bytes(serialization.Encoding.PEM))
+            intermediate_path.write_bytes(intermediate.public_bytes(serialization.Encoding.PEM))
 
             paths = generate_server_certificate(
                 intermediate=intermediate,
-                private_scalar=ca_key.private_numbers().private_value,
+                private_scalar=intermediate_key.private_numbers().private_value,
                 subject_cn="service.example.test",
                 dns_names=["service.example.test", "www.service.example.test"],
                 validity_days=7,
-                output_dir=root / "output",
+                output_dir=directory / "output",
                 allowed_dns_suffixes=(".example.test",),
             )
 
-            valid = subprocess.run(
-                [
-                    "openssl", "verify", "-CAfile", str(ca_path),
-                    "-purpose", "sslserver", "-verify_hostname",
-                    "service.example.test", str(paths["certificate"]),
-                ],
-                capture_output=True, text=True, check=False,
-            )
+            command = [
+                "openssl", "verify", "-CAfile", str(root_path),
+                "-untrusted", str(intermediate_path),
+                "-purpose", "sslserver", "-verify_hostname",
+                "service.example.test", str(paths["certificate"]),
+            ]
+            valid = subprocess.run(command, capture_output=True, text=True, check=False)
             self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
             self.assertIn(": OK", valid.stdout)
 
+            wrong_hostname_command = command.copy()
+            wrong_hostname_command[wrong_hostname_command.index("service.example.test")] = "wrong.example.test"
             invalid = subprocess.run(
-                [
-                    "openssl", "verify", "-CAfile", str(ca_path),
-                    "-purpose", "sslserver", "-verify_hostname",
-                    "wrong.example.test", str(paths["certificate"]),
-                ],
-                capture_output=True, text=True, check=False,
+                wrong_hostname_command, capture_output=True, text=True, check=False
             )
             self.assertNotEqual(invalid.returncode, 0)
             self.assertIn("hostname mismatch", (invalid.stdout + invalid.stderr).lower())
+
 
 
 if __name__ == "__main__":
