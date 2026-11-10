@@ -34,10 +34,22 @@ def generate_server_certificate(
     subject_cn: str,
     dns_names: tuple[str, ...] | list[str],
     validity_days: int,
-    output_dir: Path,
+    output_dir: str | Path,
     allowed_dns_suffixes: tuple[str, ...] | list[str],
 ) -> dict[str, Path]:
-    """Verify the CA scalar, issue a scoped TLS certificate, and write outputs without overwriting."""
+    """Verify the CA scalar and issue a profile-scoped TLS server certificate.
+
+    The intermediate must be a currently valid EC CA with certificate-signing
+    key usage, and private_scalar must match its public key. Output files are
+    created exclusively and existing files are never overwritten.
+
+    Raises:
+        ValueError: Invalid CA, scalar, validity, DNS scope, or certificate data.
+        FileExistsError: Any target output file already exists.
+        OSError: The output directory or files cannot be created/written.
+        TypeError: output_dir is not path-like or an underlying cryptography
+            operation receives an unsupported value.
+    """
     if not isinstance(intermediate, x509.Certificate):
         raise ValueError("The intermediate must be an X.509 certificate.")
     if not isinstance(subject_cn, str):
