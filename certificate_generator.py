@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 
-PROFILE_PATH = Path(__file__).resolve().parent / "profiles" / "el-ascensor-chino.json"
+DEFAULT_PROFILE_PATH = Path(__file__).resolve().parent / "profiles" / "default.json"
 MAX_VALIDITY_DAYS = 397
 
 
@@ -28,10 +28,11 @@ class CertificateProfile:
     allowed_dns_suffixes: tuple[str, ...]
 
 
-def load_profile(path: Path = PROFILE_PATH) -> CertificateProfile:
+def load_profile(path: Path | None = None) -> CertificateProfile:
     """Load editable defaults and scope restrictions from a JSON lab profile."""
+    profile_path = Path(path) if path is not None else DEFAULT_PROFILE_PATH
     try:
-        data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        data: dict[str, Any] = json.loads(profile_path.read_text(encoding="utf-8"))
         profile = CertificateProfile(
             name=str(data["name"]),
             subject_cn=str(data["subject_cn"]),
@@ -40,7 +41,7 @@ def load_profile(path: Path = PROFILE_PATH) -> CertificateProfile:
             allowed_dns_suffixes=tuple(str(item).lower() for item in data["allowed_dns_suffixes"]),
         )
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Could not load certificate profile {path}: {exc}") from exc
+        raise ValueError(f"Could not load certificate profile {profile_path}: {exc}") from exc
 
     if not profile.allowed_dns_suffixes:
         raise ValueError("A lab profile must define at least one allowed DNS suffix.")
