@@ -68,6 +68,10 @@ def _normalize_dns_name(value: str) -> str:
         ascii_name = name.encode("idna").decode("ascii")
     except UnicodeError as exc:
         raise ValueError(f"Invalid DNS name: {value!r}") from exc
+    # IDNA can expand Unicode labels. Enforce the DNS wire-format textual
+    # limit after conversion as well as before it.
+    if len(ascii_name) > 253:
+        raise ValueError(f"Invalid DNS name (exceeds 253 ASCII characters): {value!r}")
     labels = ascii_name.split(".")
     if len(labels) < 2 or any(
         not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
