@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import os
 from pathlib import Path
 
 from cryptography import x509
@@ -72,6 +73,18 @@ def generate_server_certificate(
         raise ValueError(f"Required CA extension missing: {exc}") from exc
     if not constraints.ca or not usage.key_cert_sign:
         raise ValueError("The supplied certificate is not authorized to sign certificates.")
+
+    # An EKU on a CA constrains the purposes of certificates issued below it.
+    # Absence of EKU leaves the CA unrestricted by this extension.
+    try:
+        ca_eku = intermediate.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+    except x509.ExtensionNotFound:
+        ca_eku = None
+    if ca_eku is not None and not (
+        ExtendedKeyUsageOID.SERVER_AUTH in ca_eku
+        or ExtendedKeyUsageOID.ANY_EXTENDED_KEY_USAGE in ca_eku
+    ):
+        raise ValueError("The intermediate CA EKU does not permit TLS server authentication.")
 
     now = datetime.now(timezone.utc)
     ca_not_before = _certificate_time(intermediate, "not_valid_before_utc", "not_valid_before")
@@ -163,11 +176,18 @@ def generate_server_certificate(
     }
     created: list[Path] = []
     try:
-        for label, path in paths.items():
+        # os.open applies 0600 atomically at creation (and the process umask
+        # can only make the permissions more restrictive), avoiding a window
+        # in which the private key could be created with broader permissions.
+        key_fd = os.open(paths["key"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        created.append(paths["key"])
+        with os.fdopen(key_fd, "wb") as output:
+            output.write(payloads["key"])
+        for label in ("csr", "certificate", "fullchain"):
+            path = paths[label]
             with path.open("xb") as output:
                 created.append(path)
                 output.write(payloads[label])
-        paths["key"].chmod(0o600)
     except OSError:
         for path in created:
             path.unlink(missing_ok=True)
