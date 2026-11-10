@@ -1,4 +1,8 @@
-# 4KROG ECC Analyzer
+# ECC Analyzer
+
+**BY 4KROG**
+
+*Elliptic Curve Cryptography & Certificate Toolkit*
 
 A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
 
