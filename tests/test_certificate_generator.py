@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -49,6 +50,49 @@ class CertificateGeneratorTests(unittest.TestCase):
             "banco.4krog.test", "www.banco.4krog.test", "api.banco.4krog.test"
         ))
         self.assertEqual(profile.allowed_dns_suffixes, (".4krog.test",))
+
+    def test_profile_rejects_boolean_and_float_validity(self):
+        base = {
+            "name": "Strict profile",
+            "subject_cn": "service.example.test",
+            "dns_names": ["service.example.test"],
+            "validity_days": 7,
+            "allowed_dns_suffixes": [".example.test"],
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "profile.json"
+            for invalid in (True, 7.5):
+                data = dict(base, validity_days=invalid)
+                path.write_text(json.dumps(data), encoding="utf-8")
+                with self.subTest(validity_days=invalid):
+                    with self.assertRaisesRegex(ValueError, "must be an integer"):
+                        load_profile(path)
+
+    def test_profile_rejects_malformed_dns_suffix(self):
+        data = {
+            "name": "Invalid suffix",
+            "subject_cn": "service.example.test",
+            "dns_names": ["service.example.test"],
+            "validity_days": 7,
+            "allowed_dns_suffixes": [".example..test"],
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "profile.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
+    def test_public_certificate_api_is_exposed(self):
+        from ecc_analyzer.certificates import (
+            CertificateProfile,
+            generate_server_certificate as package_generator,
+            load_certificate,
+            load_profile as package_load_profile,
+        )
+        self.assertIs(package_generator, generate_server_certificate)
+        self.assertIs(package_load_profile, load_profile)
+        self.assertTrue(callable(load_certificate))
+        self.assertTrue(CertificateProfile)
 
     def test_dns_scope_rejects_outside_domain(self):
         with self.assertRaises(ValueError):
