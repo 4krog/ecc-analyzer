@@ -111,7 +111,7 @@ Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent 
 
 ## Proof-of-impact certificate generation
 
-Option 6 is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained only in the running process and is not exported.
+Option 6 is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained in memory for the current session and is not written to the generated files. When a match is found, the CLI displays the matching scalar in the terminal; treat terminal output and scrollback as sensitive.
 
 The default profile is bundled inside the `ecc_analyzer` package and uses the reserved `.example.test` namespace. The challenge-specific `profiles/el-ascensor-chino.json` remains an external profile in a source checkout (or can be supplied from any path) and is selected explicitly with `--profile`.
 
