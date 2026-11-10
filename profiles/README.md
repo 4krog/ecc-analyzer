@@ -1,6 +1,12 @@
 # Lab certificate profiles
 
-The application currently loads `el-ascensor-chino.json` as its default profile.
+The application loads `default.json` when no profile is selected. This is a generic profile for isolated testing and uses the reserved `.example.test` namespace.
+
+Select the challenge-specific profile explicitly:
+
+```bash
+python ecc-analyzer.py --profile profiles/el-ascensor-chino.json
+```
 
 The JSON file provides:
 - `name`: display name shown in the terminal.
@@ -12,3 +18,5 @@ The JSON file provides:
 The Subject CN must be one of the SAN DNS names. DNS names entered interactively must remain within one of the configured suffixes. Keep this restriction aligned with the authorized lab namespace; changing it changes the scope of certificates the tool can issue.
 
 The Issuer is not configurable in the profile: it is taken from the loaded intermediate CA certificate so that the certificate's issuer name matches the actual signing CA.
+
+Use only reserved test namespaces or domains you are explicitly authorized to assess.
