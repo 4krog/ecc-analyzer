@@ -21,39 +21,51 @@ class CertificateProfile:
     allowed_dns_suffixes: tuple[str, ...]
 
 
-def load_profile(path: Path | None = None) -> CertificateProfile:
-    """Load a strictly validated JSON profile for an authorized lab."""
+def load_profile(path: str | Path | None = None) -> CertificateProfile:
+    """Load and validate a JSON certificate profile.
+
+    If path is omitted, the package's generic .example.test profile is used.
+    FileNotFoundError/OSError are preserved for filesystem failures;
+    malformed JSON and invalid profile contents raise ValueError.
+    A non-path-like path raises TypeError.
+    """
     profile_path = Path(path) if path is not None else DEFAULT_PROFILE_PATH
     try:
-        data: Any = json.loads(profile_path.read_text(encoding="utf-8"))
-        required = {"name", "subject_cn", "dns_names", "validity_days", "allowed_dns_suffixes"}
-        if not isinstance(data, dict) or set(data) != required:
-            raise ValueError(f"Profile must contain exactly these fields: {', '.join(sorted(required))}")
-        if not isinstance(data["name"], str) or not data["name"].strip():
-            raise ValueError("Profile name must be a non-empty string.")
-        if not isinstance(data["subject_cn"], str) or not data["subject_cn"].strip():
-            raise ValueError("Profile subject_cn must be a non-empty string.")
-        if not isinstance(data["dns_names"], list) or not data["dns_names"] or not all(isinstance(item, str) for item in data["dns_names"]):
-            raise ValueError("Profile dns_names must be a non-empty list of strings.")
-        if type(data["validity_days"]) is not int:
-            raise ValueError("Profile validity_days must be an integer.")
-        if not isinstance(data["allowed_dns_suffixes"], list) or not data["allowed_dns_suffixes"] or not all(isinstance(item, str) for item in data["allowed_dns_suffixes"]):
-            raise ValueError("Profile allowed_dns_suffixes must be a non-empty list of strings.")
-        suffixes = _normalize_dns_suffixes(tuple(data["allowed_dns_suffixes"]))
-        profile = CertificateProfile(
-            name=data["name"].strip(),
-            subject_cn=data["subject_cn"].strip(),
-            dns_names=tuple(data["dns_names"]),
-            validity_days=data["validity_days"],
-            allowed_dns_suffixes=suffixes,
-        )
-    except (OSError, TypeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Could not load certificate profile {profile_path}: {exc}") from exc
+        raw_data = profile_path.read_text(encoding="utf-8")
+    except OSError:
+        raise
+    try:
+        data: Any = json.loads(raw_data)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Could not parse certificate profile {profile_path}: {exc}") from exc
 
+    required = {"name", "subject_cn", "dns_names", "validity_days", "allowed_dns_suffixes"}
+    if not isinstance(data, dict) or set(data) != required:
+        raise ValueError(f"Profile must contain exactly these fields: {', '.join(sorted(required))}")
+    if not isinstance(data["name"], str) or not data["name"].strip():
+        raise ValueError("Profile name must be a non-empty string.")
+    if not isinstance(data["subject_cn"], str) or not data["subject_cn"].strip():
+        raise ValueError("Profile subject_cn must be a non-empty string.")
+    if not isinstance(data["dns_names"], list) or not data["dns_names"] or not all(isinstance(item, str) for item in data["dns_names"]):
+        raise ValueError("Profile dns_names must be a non-empty list of strings.")
+    if type(data["validity_days"]) is not int:
+        raise ValueError("Profile validity_days must be an integer.")
+    if not isinstance(data["allowed_dns_suffixes"], list) or not data["allowed_dns_suffixes"] or not all(isinstance(item, str) for item in data["allowed_dns_suffixes"]):
+        raise ValueError("Profile allowed_dns_suffixes must be a non-empty list of strings.")
+
+    suffixes = _normalize_dns_suffixes(tuple(data["allowed_dns_suffixes"]))
+    profile = CertificateProfile(
+        name=data["name"].strip(),
+        subject_cn=data["subject_cn"].strip(),
+        dns_names=tuple(data["dns_names"]),
+        validity_days=data["validity_days"],
+        allowed_dns_suffixes=suffixes,
+    )
     if not 1 <= profile.validity_days <= MAX_VALIDITY_DAYS:
         raise ValueError(f"Profile validity must be between 1 and {MAX_VALIDITY_DAYS} days.")
-    validate_dns_names(profile.dns_names, profile.allowed_dns_suffixes)
-    if profile.subject_cn.lower() not in {name.lower() for name in profile.dns_names}:
+    normalized_names = validate_dns_names(profile.dns_names, profile.allowed_dns_suffixes)
+    normalized_cn = _normalize_dns_name(profile.subject_cn)
+    if normalized_cn not in normalized_names:
         raise ValueError("The profile Subject CN must also appear in its SAN DNS names.")
     return profile
 
@@ -68,8 +80,6 @@ def _normalize_dns_name(value: str) -> str:
         ascii_name = name.encode("idna").decode("ascii")
     except UnicodeError as exc:
         raise ValueError(f"Invalid DNS name: {value!r}") from exc
-    # IDNA can expand Unicode labels. Enforce the DNS wire-format textual
-    # limit after conversion as well as before it.
     if len(ascii_name) > 253:
         raise ValueError(f"Invalid DNS name (exceeds 253 ASCII characters): {value!r}")
     labels = ascii_name.split(".")
@@ -101,7 +111,11 @@ def validate_dns_names(
     names: tuple[str, ...] | list[str],
     allowed_suffixes: tuple[str, ...] | list[str],
 ) -> list[str]:
-    """Validate DNS SAN values and enforce the selected lab profile's suffix scope."""
+    """Normalize SAN DNS names and enforce the supplied suffix allowlist.
+
+    Returns unique lowercase ASCII names. Raises ValueError for malformed
+    names, invalid suffixes, empty input, or names outside the allowed scope.
+    """
     if not isinstance(names, (tuple, list)) or not names:
         raise ValueError("At least one SAN DNS name is required.")
     suffixes = _normalize_dns_suffixes(allowed_suffixes)
