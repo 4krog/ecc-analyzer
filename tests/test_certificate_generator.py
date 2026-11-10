@@ -234,5 +234,50 @@ class CertificateGeneratorTests(unittest.TestCase):
                 )
 
 
+    @unittest.skipUnless(__import__("shutil").which("openssl"), "OpenSSL CLI is required")
+    def test_openssl_validates_trusted_tls_chain_and_rejects_wrong_hostname(self):
+        import subprocess
+
+        ca_key, intermediate = make_intermediate()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            ca_path = root / "lab-ca.pem"
+            ca_path.write_bytes(intermediate.public_bytes(__import__(
+                "cryptography.hazmat.primitives.serialization", fromlist=["Encoding"]
+            ).Encoding.PEM))
+
+            paths = generate_server_certificate(
+                intermediate=intermediate,
+                private_scalar=ca_key.private_numbers().private_value,
+                subject_cn="service.example.test",
+                dns_names=["service.example.test", "www.service.example.test"],
+                validity_days=7,
+                output_dir=root / "output",
+                allowed_dns_suffixes=(".example.test",),
+            )
+
+            valid = subprocess.run(
+                [
+                    "openssl", "verify", "-CAfile", str(ca_path),
+                    "-purpose", "sslserver", "-verify_hostname",
+                    "service.example.test", str(paths["certificate"]),
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
+            self.assertIn(": OK", valid.stdout)
+
+            invalid = subprocess.run(
+                [
+                    "openssl", "verify", "-CAfile", str(ca_path),
+                    "-purpose", "sslserver", "-verify_hostname",
+                    "wrong.example.test", str(paths["certificate"]),
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("hostname mismatch", (invalid.stdout + invalid.stderr).lower())
+
+
 if __name__ == "__main__":
     unittest.main()
