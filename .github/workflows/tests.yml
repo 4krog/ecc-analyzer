@@ -1,0 +1,91 @@
+name: ECC Analyzer tests
+
+on:
+  push:
+    branches:
+      - main
+      - feature/proof-of-impact-certificates
+      - refactor/reusable-ecc-core
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile Python modules
+        run: |
+          python -m py_compile ecc-analyzer.py certificate_generator.py
+          python -m compileall -q ecc_analyzer tests
+
+      - name: Run test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Verify source-checkout compatibility launcher
+        run: python ecc-analyzer.py --help
+
+      - name: Build wheel and source distribution
+        run: |
+          python -m pip install build
+          python -m build --sdist --wheel --outdir dist
+
+      - name: Verify distribution contents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          wheel = next(Path("dist").glob("*.whl"))
+          with zipfile.ZipFile(wheel) as archive:
+              wheel_files = archive.namelist()
+          assert any(
+              name.endswith(".dist-info/licenses/LICENSE") or name == "LICENSE"
+              for name in wheel_files
+          ), "MIT license is missing from the wheel"
+          assert any(
+              name.endswith("ecc_analyzer/certificates/profiles/default.json")
+              for name in wheel_files
+          ), "Bundled default profile is missing from the wheel"
+
+          source = next(Path("dist").glob("*.tar.gz"))
+          with tarfile.open(source, "r:gz") as archive:
+              source_files = archive.getnames()
+          assert any(Path(name).name == "LICENSE" for name in source_files), (
+              "MIT license is missing from the source distribution"
+          )
+          assert any(
+              name.endswith("ecc_analyzer/certificates/profiles/default.json")
+              for name in source_files
+          ), "Bundled default profile is missing from the source distribution"
+          print("Wheel and source distribution contents: OK")
+          PY
+
+      - name: Verify installed package outside checkout
+        run: |
+          python -m venv /tmp/ecc-analyzer-venv
+          /tmp/ecc-analyzer-venv/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/ecc-analyzer-venv/bin/ecc-analyzer --help
+          /tmp/ecc-analyzer-venv/bin/python -c "from ecc_analyzer.certificates import load_profile; p = load_profile(); assert p.subject_cn == 'service.example.test'; print('Installed package and bundled profile: OK')"

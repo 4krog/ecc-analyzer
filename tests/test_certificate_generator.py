@@ -1,0 +1,367 @@
+import json
+import os
+import shutil
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest import mock
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
+
+from certificate_generator import generate_server_certificate, load_profile, validate_dns_names
+
+
+def make_intermediate(eku=None):
+    key = ec.generate_private_key(ec.SECP384R1())
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "4KROG Intermediate CA")])
+    now = datetime.now(timezone.utc)
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before((now - timedelta(days=1)).replace(tzinfo=None))
+        .not_valid_after((now + timedelta(days=30)).replace(tzinfo=None))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(x509.KeyUsage(
+            digital_signature=True, content_commitment=False, key_encipherment=False,
+            data_encipherment=False, key_agreement=False, key_cert_sign=True,
+            crl_sign=True, encipher_only=None, decipher_only=None,
+        ), critical=True)
+    )
+    if eku is not None:
+        builder = builder.add_extension(x509.ExtendedKeyUsage(eku), critical=False)
+    return key, builder.sign(key, hashes.SHA384())
+
+
+class CertificateGeneratorTests(unittest.TestCase):
+    def test_profile_loading_preserves_missing_file_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            missing = Path(temp) / "missing.json"
+            with self.assertRaises(FileNotFoundError):
+                load_profile(missing)
+
+    def test_profile_loading_wraps_malformed_json_as_value_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "broken.json"
+            path.write_text("{not-json", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Could not parse certificate profile"):
+                load_profile(path)
+
+    def test_certificate_loader_preserves_missing_file_error(self):
+        from ecc_analyzer.certificates import load_certificate
+        with tempfile.TemporaryDirectory() as temp:
+            missing = Path(temp) / "missing.pem"
+            with self.assertRaises(FileNotFoundError):
+                load_certificate(missing)
+
+    def test_default_profile_is_generic_and_reserved_for_labs(self):
+        profile = load_profile()
+        self.assertEqual(profile.subject_cn, "service.example.test")
+        self.assertEqual(profile.dns_names, ("service.example.test", "www.service.example.test"))
+        self.assertEqual(profile.allowed_dns_suffixes, (".example.test",))
+
+    def test_challenge_profile_remains_available_explicitly(self):
+        profile_path = Path(__file__).resolve().parents[1] / "profiles" / "el-ascensor-chino.json"
+        profile = load_profile(profile_path)
+        self.assertEqual(profile.subject_cn, "banco.4krog.test")
+        self.assertEqual(profile.dns_names, (
+            "banco.4krog.test", "www.banco.4krog.test", "api.banco.4krog.test"
+        ))
+        self.assertEqual(profile.allowed_dns_suffixes, (".4krog.test",))
+
+    def test_profile_rejects_boolean_and_float_validity(self):
+        base = {
+            "name": "Strict profile",
+            "subject_cn": "service.example.test",
+            "dns_names": ["service.example.test"],
+            "validity_days": 7,
+            "allowed_dns_suffixes": [".example.test"],
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "profile.json"
+            for invalid in (True, 7.5):
+                data = dict(base, validity_days=invalid)
+                path.write_text(json.dumps(data), encoding="utf-8")
+                with self.subTest(validity_days=invalid):
+                    with self.assertRaisesRegex(ValueError, "must be an integer"):
+                        load_profile(path)
+
+    def test_profile_rejects_malformed_dns_suffix(self):
+        data = {
+            "name": "Invalid suffix",
+            "subject_cn": "service.example.test",
+            "dns_names": ["service.example.test"],
+            "validity_days": 7,
+            "allowed_dns_suffixes": [".example..test"],
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "profile.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_profile(path)
+
+    def test_public_certificate_api_is_exposed(self):
+        from ecc_analyzer.certificates import (
+            CertificateProfile,
+            generate_server_certificate as package_generator,
+            load_certificate,
+            load_profile as package_load_profile,
+        )
+        self.assertIs(package_generator, generate_server_certificate)
+        self.assertIs(package_load_profile, load_profile)
+        self.assertTrue(callable(load_certificate))
+        self.assertTrue(CertificateProfile)
+
+    def test_dns_scope_rejects_outside_domain(self):
+        with self.assertRaises(ValueError):
+            validate_dns_names(["attacker.example"], (".4krog.test",))
+
+    def test_dns_scope_accepts_lab_names(self):
+        self.assertEqual(
+            validate_dns_names(["BAnco.4krog.test", "api.4krog.test"], (".4krog.test",)),
+            ["banco.4krog.test", "api.4krog.test"],
+        )
+        self.assertEqual(
+            validate_dns_names(["service.example.test."], [".EXAMPLE.TEST."]),
+            ["service.example.test"],
+        )
+
+    def test_dns_scope_rejects_names_over_253_ascii_characters_after_idna(self):
+        # Each Unicode label is valid on its own, but IDNA expansion makes
+        # the complete DNS name exceed the 253-character textual limit.
+        name = ".".join(["é" * 57] * 4) + ".example.test"
+        self.assertLessEqual(len(name), 253)
+        with self.assertRaisesRegex(ValueError, "253 ASCII characters"):
+            validate_dns_names([name], (".example.test",))
+
+    def test_dns_scope_rejects_invalid_public_api_types(self):
+        invalid_inputs = (
+            (None, (".example.test",)),
+            ([], (".example.test",)),
+            ([None], (".example.test",)),
+            (["service.example.test"], ()),
+            (["service.example.test"], [None]),
+            (["service.example.test"], ["example.test"]),
+            (["service.example.test"], [".example..test"]),
+        )
+        for names, suffixes in invalid_inputs:
+            with self.subTest(names=names, suffixes=suffixes), self.assertRaises(ValueError):
+                validate_dns_names(names, suffixes)
+
+    def test_issued_certificate_is_signed_and_outputs_are_protected(self):
+        ca_key, intermediate = make_intermediate()
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "output"
+            with mock.patch("ecc_analyzer.certificates.issuer.os.open", wraps=os.open) as open_file:
+                paths = generate_server_certificate(
+                    intermediate=intermediate,
+                    private_scalar=ca_key.private_numbers().private_value,
+                    subject_cn="banco.4krog.test",
+                    dns_names=["banco.4krog.test", "www.banco.4krog.test"],
+                    validity_days=7,
+                    output_dir=output,
+                    allowed_dns_suffixes=(".4krog.test",),
+                )
+            key_open = next(call for call in open_file.call_args_list if Path(call.args[0]) == paths["key"])
+            self.assertEqual(key_open.args[2], 0o600)
+            issued = x509.load_pem_x509_certificate(paths["certificate"].read_bytes())
+            ca_key.public_key().verify(
+                issued.signature, issued.tbs_certificate_bytes,
+                ec.ECDSA(issued.signature_hash_algorithm),
+            )
+            self.assertEqual(issued.issuer, intermediate.subject)
+            self.assertEqual(
+                issued.extensions.get_extension_for_class(x509.SubjectAlternativeName).value.get_values_for_type(x509.DNSName),
+                ["banco.4krog.test", "www.banco.4krog.test"],
+            )
+            self.assertFalse(issued.extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
+            self.assertEqual(paths["key"].stat().st_mode & 0o777, 0o600)
+            with self.assertRaises(FileExistsError):
+                generate_server_certificate(
+                    intermediate, ca_key.private_numbers().private_value,
+                    "banco.4krog.test", ["banco.4krog.test"], 7,
+                    output, (".4krog.test",),
+                )
+
+
+    def test_ca_eku_must_permit_tls_server_authentication(self):
+        client_only = [x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH]
+        ca_key, restricted_ca = make_intermediate(eku=client_only)
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(ValueError, "EKU does not permit TLS server authentication"):
+                generate_server_certificate(
+                    restricted_ca, ca_key.private_numbers().private_value,
+                    "banco.4krog.test", ["banco.4krog.test"], 7,
+                    Path(temp) / "rejected", (".4krog.test",),
+                )
+
+    def test_ca_eku_server_auth_and_any_eku_are_accepted(self):
+        allowed_ekus = (
+            [x509.oid.ExtendedKeyUsageOID.SERVER_AUTH],
+            [x509.oid.ExtendedKeyUsageOID.ANY_EXTENDED_KEY_USAGE],
+        )
+        for index, eku in enumerate(allowed_ekus):
+            ca_key, permitted_ca = make_intermediate(eku=eku)
+            with tempfile.TemporaryDirectory() as temp:
+                result = generate_server_certificate(
+                    permitted_ca, ca_key.private_numbers().private_value,
+                    "banco.4krog.test", ["banco.4krog.test"], 7,
+                    Path(temp) / f"accepted-{index}", (".4krog.test",),
+                )
+                self.assertTrue(result["certificate"].is_file())
+
+    def test_ca_without_eku_remains_usable(self):
+        ca_key, unrestricted_ca = make_intermediate()
+        with tempfile.TemporaryDirectory() as temp:
+            result = generate_server_certificate(
+                unrestricted_ca, ca_key.private_numbers().private_value,
+                "banco.4krog.test", ["banco.4krog.test"], 7,
+                Path(temp) / "no-eku", (".4krog.test",),
+            )
+            self.assertTrue(result["certificate"].is_file())
+
+    def test_public_issuer_rejects_boolean_and_float_numeric_inputs(self):
+        ca_key, intermediate = make_intermediate()
+        scalar = ca_key.private_numbers().private_value
+        with tempfile.TemporaryDirectory() as temp:
+            for invalid_scalar in (True, 1.5):
+                with self.subTest(private_scalar=invalid_scalar), self.assertRaisesRegex(
+                    ValueError, "private scalar must be a positive integer"
+                ):
+                    generate_server_certificate(
+                        intermediate, invalid_scalar, "banco.4krog.test",
+                        ["banco.4krog.test"], 7, Path(temp) / "scalar",
+                        (".4krog.test",),
+                    )
+            for invalid_days in (True, 7.5):
+                with self.subTest(validity_days=invalid_days), self.assertRaisesRegex(
+                    ValueError, "Validity must be an integer"
+                ):
+                    generate_server_certificate(
+                        intermediate, scalar, "banco.4krog.test",
+                        ["banco.4krog.test"], invalid_days, Path(temp) / "days",
+                        (".4krog.test",),
+                    )
+
+    def test_public_issuer_rejects_malformed_dns_api_inputs(self):
+        ca_key, intermediate = make_intermediate()
+        scalar = ca_key.private_numbers().private_value
+        with tempfile.TemporaryDirectory() as temp:
+            for invalid_names in (None, "banco.4krog.test", [None]):
+                with self.subTest(dns_names=invalid_names), self.assertRaises(ValueError):
+                    generate_server_certificate(
+                        intermediate, scalar, "banco.4krog.test",
+                        invalid_names, 7, Path(temp) / "names",
+                        (".4krog.test",),
+                    )
+            with self.assertRaisesRegex(ValueError, "intermediate must be"):
+                generate_server_certificate(
+                    object(), scalar, "banco.4krog.test",
+                    ["banco.4krog.test"], 7, Path(temp) / "cert",
+                    (".4krog.test",),
+                )
+
+    def test_wrong_scalar_is_rejected(self):
+        _, intermediate = make_intermediate()
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(ValueError, "NO MATCH"):
+                generate_server_certificate(
+                    intermediate, 1, "banco.4krog.test",
+                    ["banco.4krog.test"], 7, Path(temp) / "out",
+                    (".4krog.test",),
+                )
+
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL CLI is required")
+    def test_openssl_validates_trusted_tls_chain_and_rejects_wrong_hostname(self):
+        import subprocess
+
+        # Build a real two-CA hierarchy: trusted root -> intermediate -> TLS leaf.
+        root_key = ec.generate_private_key(ec.SECP384R1())
+        intermediate_key = ec.generate_private_key(ec.SECP384R1())
+        now = datetime.now(timezone.utc)
+        root_subject = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "4KROG Test Root CA")
+        ])
+        intermediate_subject = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "4KROG Test Intermediate CA")
+        ])
+
+        root = (
+            x509.CertificateBuilder()
+            .subject_name(root_subject)
+            .issuer_name(root_subject)
+            .public_key(root_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before((now - timedelta(days=1)).replace(tzinfo=None))
+            .not_valid_after((now + timedelta(days=30)).replace(tzinfo=None))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=1), critical=True)
+            .add_extension(x509.KeyUsage(
+                digital_signature=True, content_commitment=False, key_encipherment=False,
+                data_encipherment=False, key_agreement=False, key_cert_sign=True,
+                crl_sign=True, encipher_only=None, decipher_only=None,
+            ), critical=True)
+            .sign(root_key, hashes.SHA384())
+        )
+        intermediate = (
+            x509.CertificateBuilder()
+            .subject_name(intermediate_subject)
+            .issuer_name(root.subject)
+            .public_key(intermediate_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before((now - timedelta(hours=12)).replace(tzinfo=None))
+            .not_valid_after((now + timedelta(days=14)).replace(tzinfo=None))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+            .add_extension(x509.KeyUsage(
+                digital_signature=True, content_commitment=False, key_encipherment=False,
+                data_encipherment=False, key_agreement=False, key_cert_sign=True,
+                crl_sign=True, encipher_only=None, decipher_only=None,
+            ), critical=True)
+            .sign(root_key, hashes.SHA384())
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            root_path = directory / "root.pem"
+            intermediate_path = directory / "intermediate.pem"
+            root_path.write_bytes(root.public_bytes(serialization.Encoding.PEM))
+            intermediate_path.write_bytes(intermediate.public_bytes(serialization.Encoding.PEM))
+
+            paths = generate_server_certificate(
+                intermediate=intermediate,
+                private_scalar=intermediate_key.private_numbers().private_value,
+                subject_cn="service.example.test",
+                dns_names=["service.example.test", "www.service.example.test"],
+                validity_days=7,
+                output_dir=directory / "output",
+                allowed_dns_suffixes=(".example.test",),
+            )
+
+            command = [
+                "openssl", "verify", "-CAfile", str(root_path),
+                "-untrusted", str(intermediate_path),
+                "-purpose", "sslserver", "-verify_hostname",
+                "service.example.test", str(paths["certificate"]),
+            ]
+            valid = subprocess.run(command, capture_output=True, text=True, check=False)
+            self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
+            self.assertIn(": OK", valid.stdout)
+
+            wrong_hostname_command = command.copy()
+            wrong_hostname_command[wrong_hostname_command.index("service.example.test")] = "wrong.example.test"
+            invalid = subprocess.run(
+                wrong_hostname_command, capture_output=True, text=True, check=False
+            )
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn("hostname mismatch", (invalid.stdout + invalid.stderr).lower())
+
+
+
+if __name__ == "__main__":
+    unittest.main()
