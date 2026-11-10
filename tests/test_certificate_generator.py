@@ -36,6 +36,26 @@ def make_intermediate():
 
 
 class CertificateGeneratorTests(unittest.TestCase):
+    def test_profile_loading_preserves_missing_file_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            missing = Path(temp) / "missing.json"
+            with self.assertRaises(FileNotFoundError):
+                load_profile(missing)
+
+    def test_profile_loading_wraps_malformed_json_as_value_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "broken.json"
+            path.write_text("{not-json", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Could not parse certificate profile"):
+                load_profile(path)
+
+    def test_certificate_loader_preserves_missing_file_error(self):
+        from ecc_analyzer.certificates import load_certificate
+        with tempfile.TemporaryDirectory() as temp:
+            missing = Path(temp) / "missing.pem"
+            with self.assertRaises(FileNotFoundError):
+                load_certificate(missing)
+
     def test_default_profile_is_generic_and_reserved_for_labs(self):
         profile = load_profile()
         self.assertEqual(profile.subject_cn, "service.example.test")
