@@ -33,6 +33,8 @@ def parse_candidate(value: str) -> int:
 
 def test_candidate(public_key: ec.EllipticCurvePublicKey, candidate: int) -> bool:
     """Return whether candidate * G equals the supplied EC public point."""
+    if not isinstance(public_key, ec.EllipticCurvePublicKey):
+        raise ValueError("public_key must be an elliptic-curve public key.")
     # bool is an int subclass in Python, but it is not a valid scalar input.
     if type(candidate) is not int or candidate <= 0:
         return False
@@ -82,7 +84,12 @@ def find_matching_candidates(
     public_key: ec.EllipticCurvePublicKey,
     candidates: Iterable[int],
 ) -> tuple[int, ...]:
-    """Return unique supplied candidates whose derived point matches public_key."""
+    """Return unique valid integer candidates whose derived point matches public_key.
+
+    Non-integer candidate values are ignored. Invalid public-key objects raise ValueError.
+    """
+    if not isinstance(public_key, ec.EllipticCurvePublicKey):
+        raise ValueError("public_key must be an elliptic-curve public key.")
     matches: list[int] = []
     seen: set[int] = set()
     for candidate in candidates:
