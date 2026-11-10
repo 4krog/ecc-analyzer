@@ -50,22 +50,20 @@ class Style:
 
 def banner() -> None:
     logo = (
-        "             .-''''-.",
-        "          .-'  .--.  '-.",
-        "        .'    /    \\    '.",
-        "       /     |  o   |     \\",
-        "      ;       \\    /       ;",
-        "       \\       '--'       /",
-        "        '.              .'",
-        "          '-.________.-'",
+        "███████╗  ██████╗  ██████╗",
+        "██╔════╝ ██╔════╝ ██╔════╝",
+        "█████╗   ██║      ██║",
+        "██╔══╝   ██║      ██║",
+        "███████╗ ╚██████╗ ╚██████╗",
+        "╚══════╝  ╚═════╝  ╚═════╝",
     )
     print()
     for line in logo:
         print(Style.paint(line, Style.RED + Style.BOLD))
-    print(Style.paint("             ECC ANALYZER", Style.WHITE + Style.BOLD))
-    print(Style.paint("                 BY 4KROG", Style.RED + Style.BOLD))
-    print(Style.paint("  Elliptic Curve Cryptography & Certificate Toolkit", Style.DIM))
-    print(Style.paint(f"                         Version {VERSION}", Style.DIM))
+    print(Style.paint("          A N A L Y Z E R", Style.WHITE + Style.BOLD))
+    print(Style.paint("             BY 4KROG", Style.RED + Style.BOLD))
+    print(Style.paint("   Elliptic Curve Cryptography Toolkit", Style.DIM))
+    print(Style.paint(f"                   v{VERSION}", Style.DIM))
     print()
 
 
