@@ -39,10 +39,7 @@ def load_profile(path: Path | None = None) -> CertificateProfile:
             raise ValueError("Profile validity_days must be an integer.")
         if not isinstance(data["allowed_dns_suffixes"], list) or not data["allowed_dns_suffixes"] or not all(isinstance(item, str) for item in data["allowed_dns_suffixes"]):
             raise ValueError("Profile allowed_dns_suffixes must be a non-empty list of strings.")
-        raw_suffixes = tuple(item.lower() for item in data["allowed_dns_suffixes"])
-        if any(not item.startswith(".") or item.startswith("..") for item in raw_suffixes):
-            raise ValueError("Each allowed DNS suffix must start with exactly one dot.")
-        suffixes = tuple("." + _normalize_dns_name(item[1:]) for item in raw_suffixes)
+        suffixes = _normalize_dns_suffixes(tuple(data["allowed_dns_suffixes"]))
         profile = CertificateProfile(
             name=data["name"].strip(),
             subject_cn=data["subject_cn"].strip(),
@@ -62,6 +59,8 @@ def load_profile(path: Path | None = None) -> CertificateProfile:
 
 
 def _normalize_dns_name(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("DNS names must be strings.")
     name = value.strip().rstrip(".").lower()
     if not name or len(name) > 253 or "*" in name:
         raise ValueError(f"Invalid DNS name: {value!r}")
@@ -78,16 +77,36 @@ def _normalize_dns_name(value: str) -> str:
     return ascii_name
 
 
-def validate_dns_names(names: tuple[str, ...] | list[str], allowed_suffixes: tuple[str, ...]) -> list[str]:
+def _normalize_dns_suffixes(allowed_suffixes: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    if not isinstance(allowed_suffixes, (tuple, list)) or not allowed_suffixes:
+        raise ValueError("At least one allowed DNS suffix is required.")
+    normalized: list[str] = []
+    for suffix in allowed_suffixes:
+        if not isinstance(suffix, str):
+            raise ValueError("Allowed DNS suffixes must be strings.")
+        raw = suffix.strip()
+        if not raw.startswith(".") or raw.startswith(".."):
+            raise ValueError("Each allowed DNS suffix must start with exactly one dot.")
+        value = "." + _normalize_dns_name(raw[1:])
+        if value not in normalized:
+            normalized.append(value)
+    return tuple(normalized)
+
+
+def validate_dns_names(
+    names: tuple[str, ...] | list[str],
+    allowed_suffixes: tuple[str, ...] | list[str],
+) -> list[str]:
     """Validate DNS SAN values and enforce the selected lab profile's suffix scope."""
-    if not names:
+    if not isinstance(names, (tuple, list)) or not names:
         raise ValueError("At least one SAN DNS name is required.")
+    suffixes = _normalize_dns_suffixes(allowed_suffixes)
     normalized: list[str] = []
     for raw_name in names:
         name = _normalize_dns_name(raw_name)
-        if not any(name.endswith(suffix) and name != suffix.lstrip(".") for suffix in allowed_suffixes):
+        if not any(name.endswith(suffix) for suffix in suffixes):
             raise ValueError(
-                f"{name} is outside this lab profile. Allowed DNS suffixes: {', '.join(allowed_suffixes)}"
+                f"{name} is outside this lab profile. Allowed DNS suffixes: {', '.join(suffixes)}"
             )
         if name not in normalized:
             normalized.append(name)
