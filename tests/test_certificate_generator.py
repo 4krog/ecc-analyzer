@@ -108,6 +108,14 @@ class CertificateGeneratorTests(unittest.TestCase):
             ["service.example.test"],
         )
 
+    def test_dns_scope_rejects_names_over_253_ascii_characters_after_idna(self):
+        # Each Unicode label is valid on its own, but IDNA expansion makes
+        # the complete DNS name exceed the 253-character textual limit.
+        name = ".".join(["é" * 57] * 4) + ".example.test"
+        self.assertLessEqual(len(name), 253)
+        with self.assertRaisesRegex(ValueError, "253 ASCII characters"):
+            validate_dns_names([name], (".example.test",))
+
     def test_dns_scope_rejects_invalid_public_api_types(self):
         invalid_inputs = (
             (None, (".example.test",)),
