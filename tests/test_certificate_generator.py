@@ -35,8 +35,15 @@ def make_intermediate():
 
 
 class CertificateGeneratorTests(unittest.TestCase):
-    def test_default_lab_profile(self):
+    def test_default_profile_is_generic_and_reserved_for_labs(self):
         profile = load_profile()
+        self.assertEqual(profile.subject_cn, "service.example.test")
+        self.assertEqual(profile.dns_names, ("service.example.test", "www.service.example.test"))
+        self.assertEqual(profile.allowed_dns_suffixes, (".example.test",))
+
+    def test_challenge_profile_remains_available_explicitly(self):
+        profile_path = Path(__file__).resolve().parents[1] / "profiles" / "el-ascensor-chino.json"
+        profile = load_profile(profile_path)
         self.assertEqual(profile.subject_cn, "banco.4krog.test")
         self.assertEqual(profile.dns_names, (
             "banco.4krog.test", "www.banco.4krog.test", "api.banco.4krog.test"
