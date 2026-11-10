@@ -51,7 +51,7 @@ class CandidateCoreTests(unittest.TestCase):
     def test_read_candidates_supports_comments_and_hex(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "candidates.txt"
-            path.write_text("# test values\\n123456789\\n0x75bcd16 # another candidate\\n", encoding="utf-8")
+            path.write_text("# test values\n123456789\n0x75bcd16 # another candidate\n", encoding="utf-8")
             self.assertEqual(read_candidates(path), [self.scalar, self.scalar + 1])
 
 
