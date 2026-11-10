@@ -16,7 +16,10 @@ MAX_RANGE_CANDIDATES = 100_000
 
 
 def parse_candidate(value: str) -> int:
-    """Parse a positive decimal or 0x-prefixed hexadecimal scalar candidate."""
+    """Parse a positive decimal or 0x-prefixed hexadecimal scalar candidate.
+
+    Raises ValueError when the input is not text or is not a positive integer.
+    """
     if not isinstance(value, str):
         raise ValueError("Candidate must be supplied as text.")
     text = value.strip().replace("_", "")
@@ -32,7 +35,11 @@ def parse_candidate(value: str) -> int:
 
 
 def test_candidate(public_key: ec.EllipticCurvePublicKey, candidate: int) -> bool:
-    """Return whether candidate * G equals the supplied EC public point."""
+    """Return whether candidate * G equals the supplied EC public point.
+
+    Raises ValueError for a non-EC public key. Invalid candidate values,
+    including booleans, non-integers and non-positive integers, return False.
+    """
     if not isinstance(public_key, ec.EllipticCurvePublicKey):
         raise ValueError("public_key must be an elliptic-curve public key.")
     # bool is an int subclass in Python, but it is not a valid scalar input.
@@ -45,8 +52,12 @@ def test_candidate(public_key: ec.EllipticCurvePublicKey, candidate: int) -> boo
     return derived.public_numbers() == public_key.public_numbers()
 
 
-def read_candidates(path: Path) -> list[int]:
-    """Read decimal/hex candidates from a text file; ignore blanks and # comments."""
+def read_candidates(path: str | Path) -> list[int]:
+    """Read candidates from a UTF-8 file; ignore blank lines and # comments.
+
+    Raises FileNotFoundError/OSError for file access failures, UnicodeError for
+    invalid UTF-8, and ValueError for malformed or empty candidate files.
+    """
     path = Path(path)
     candidates: list[int] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -63,7 +74,11 @@ def read_candidates(path: Path) -> list[int]:
 
 
 def parse_range(spec: str, maximum: int = MAX_RANGE_CANDIDATES) -> range:
-    """Parse an inclusive START:END range with a defensive candidate-count limit."""
+    """Parse an inclusive START:END range with a defensive candidate-count limit.
+
+    Raises ValueError for malformed bounds, a non-positive/invalid maximum,
+    descending ranges, or ranges exceeding the configured limit.
+    """
     if type(maximum) is not int or maximum < 1:
         raise ValueError("Range maximum must be a positive integer.")
     try:
@@ -86,7 +101,10 @@ def find_matching_candidates(
 ) -> tuple[int, ...]:
     """Return unique valid integer candidates whose derived point matches public_key.
 
-    Non-integer candidate values are ignored. Invalid public-key objects raise ValueError.
+    Non-integer values are intentionally ignored; non-positive integers are
+    tested and return no match. A non-EC public key raises ValueError.
+    A non-iterable candidates argument raises TypeError; exceptions raised by
+    a caller-provided iterable are allowed to propagate.
     """
     if not isinstance(public_key, ec.EllipticCurvePublicKey):
         raise ValueError("public_key must be an elliptic-curve public key.")
