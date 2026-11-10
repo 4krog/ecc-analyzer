@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "4krog-ecc-analyzer"
+version = "1.2.0"
+description = "Inspect EC X.509 certificates and verify explicitly supplied private-key candidates."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "4KROG" }]
+dependencies = [
+    "cryptography>=42.0.0",
+]
+
+[project.scripts]
+ecc-analyzer = "ecc_analyzer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ecc_analyzer*"]
+
+[tool.setuptools.package-data]
+"ecc_analyzer.certificates" = ["profiles/*.json"]
