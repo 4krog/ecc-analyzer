@@ -38,12 +38,20 @@ cd ecc-analyzer
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install .
 ```
+
+This installs the reusable `ecc_analyzer` Python package and the `ecc-analyzer` terminal command. For development, install with `python -m pip install -e .`.
 
 ## Usage
 
-Start the interactive application with the generic, reserved lab profile:
+Start the installed interactive application with the generic, reserved lab profile:
+
+```bash
+ecc-analyzer
+```
+
+When running directly from a source checkout, the compatibility launcher also remains available:
 
 ```bash
 python ecc-analyzer.py
@@ -52,7 +60,7 @@ python ecc-analyzer.py
 Select a different JSON profile explicitly:
 
 ```bash
-python ecc-analyzer.py --profile profiles/el-ascensor-chino.json
+ecc-analyzer --profile profiles/el-ascensor-chino.json
 ```
 
 You can provide your own profile file with the same JSON structure. Use only DNS namespaces reserved for testing or domains you are explicitly authorized to assess. The profile's `allowed_dns_suffixes` setting is enforced when SAN names are entered.
@@ -76,7 +84,7 @@ Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent 
 
 Option 6 is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained only in the running process and is not exported.
 
-The default profile is bundled inside the `ecc_analyzer` package and uses the reserved `.example.test` namespace. The challenge-specific `profiles/el-ascensor-chino.json` remains an external profile and is selected explicitly with `--profile`.
+The default profile is bundled inside the `ecc_analyzer` package and uses the reserved `.example.test` namespace. The challenge-specific `profiles/el-ascensor-chino.json` remains an external profile in a source checkout (or can be supplied from any path) and is selected explicitly with `--profile`.
 
 A profile defines the display name, default Subject CN, default SAN DNS names, validity period, and allowed DNS suffixes. These values can be edited in the interactive prompts, but every SAN name must remain within the selected profile's configured suffix scope. Custom profiles should use reserved test namespaces or domains that you are explicitly authorized to assess. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
 
