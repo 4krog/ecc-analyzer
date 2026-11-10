@@ -79,7 +79,7 @@ class MainMenuStateTests(unittest.TestCase):
         with patch.object(ecc_analyzer, "generate_certificate_interactive") as generate:
             output = self.run_menu(inputs)
 
-        generate.assert_called_once_with(self.cert, self.scalar)
+        generate.assert_called_once_with(self.cert, self.scalar, None)
         self.assertIn("VERIFIED CANDIDATE: AVAILABLE FOR THIS CERTIFICATE", output)
 
     def test_failed_replacement_keeps_certificate_but_invalidates_scalar(self):
