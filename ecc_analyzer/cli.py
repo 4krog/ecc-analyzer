@@ -50,18 +50,20 @@ class Style:
 
 def banner() -> None:
     logo = (
-        "  #  #  # ####  ###  ###",
-        " # # # # #   ##   ##    ",
-        "#  # ##  #### #   ## ###",
-        "##### # # # #  #   ##   #",
-        "   # #  # #  #  ###  ### ",
+        "███████╗  ██████╗  ██████╗",
+        "██╔════╝ ██╔════╝ ██╔════╝",
+        "█████╗   ██║      ██║",
+        "██╔══╝   ██║      ██║",
+        "███████╗ ╚██████╗ ╚██████╗",
+        "╚══════╝  ╚═════╝  ╚═════╝",
     )
     print()
     for line in logo:
         print(Style.paint(line, Style.RED + Style.BOLD))
-    print()
-    print(Style.paint(f"       ECC ANALYZER v{VERSION}", Style.BOLD))
-    print(Style.paint("       Elliptic Curve Key Analyzer", Style.DIM))
+    print(Style.paint("          A N A L Y Z E R", Style.WHITE + Style.BOLD))
+    print(Style.paint("             BY 4KROG", Style.RED + Style.BOLD))
+    print(Style.paint("   Elliptic Curve Cryptography Toolkit", Style.DIM))
+    print(Style.paint(f"                   v{VERSION}", Style.DIM))
     print()
 
 
@@ -336,7 +338,7 @@ def main_menu(profile_path: Path | None = None) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Inspect EC certificates and verify supplied private-key candidates."
+        description="ECC Analyzer by 4KROG — inspect EC certificates and verify supplied private-key candidates."
     )
     parser.add_argument(
         "--profile",
