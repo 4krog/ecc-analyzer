@@ -1,11 +1,12 @@
 import json
+import shutil
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
@@ -234,7 +235,7 @@ class CertificateGeneratorTests(unittest.TestCase):
                 )
 
 
-    @unittest.skipUnless(__import__("shutil").which("openssl"), "OpenSSL CLI is required")
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL CLI is required")
     def test_openssl_validates_trusted_tls_chain_and_rejects_wrong_hostname(self):
         import subprocess
 
@@ -242,9 +243,7 @@ class CertificateGeneratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             ca_path = root / "lab-ca.pem"
-            ca_path.write_bytes(intermediate.public_bytes(__import__(
-                "cryptography.hazmat.primitives.serialization", fromlist=["Encoding"]
-            ).Encoding.PEM))
+            ca_path.write_bytes(intermediate.public_bytes(serialization.Encoding.PEM))
 
             paths = generate_server_certificate(
                 intermediate=intermediate,
