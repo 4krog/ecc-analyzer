@@ -14,11 +14,16 @@ from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from certificate_generator import generate_server_certificate, load_profile
+from ecc_analyzer.core.candidates import (
+    parse_candidate,
+    parse_range,
+    read_candidates,
+    test_candidate,
+)
+from ecc_analyzer.certificates.loader import load_certificate
 
 
 VERSION = "1.2.0"
-MAX_RANGE_CANDIDATES = 100_000
-
 
 class Style:
     """Small ANSI styling helper; no third-party terminal UI dependency."""
@@ -78,21 +83,6 @@ def ask_path(prompt: str = "Certificate path: ") -> Path:
     return normalize_path(raw)
 
 
-def load_certificate(path: Path) -> x509.Certificate:
-    data = path.read_bytes()
-    try:
-        if b"-----BEGIN CERTIFICATE-----" in data:
-            cert = x509.load_pem_x509_certificate(data)
-        else:
-            cert = x509.load_der_x509_certificate(data)
-    except ValueError as exc:
-        raise ValueError(f"Could not parse an X.509 certificate: {exc}") from exc
-
-    if not isinstance(cert.public_key(), ec.EllipticCurvePublicKey):
-        raise ValueError("The certificate does not contain an EC public key.")
-    return cert
-
-
 def certificate_time_utc(cert: x509.Certificate, utc_attribute: str, legacy_attribute: str):
     """Return certificate validity time as an aware UTC datetime across cryptography versions."""
     value = getattr(cert, utc_attribute, None)
@@ -130,27 +120,6 @@ def inspect_certificate(cert: x509.Certificate, path: Path | None = None) -> ec.
     return public_key
 
 
-def parse_candidate(value: str) -> int:
-    text = value.strip().replace("_", "")
-    if not text:
-        raise ValueError("Empty candidate.")
-    try:
-        number = int(text, 0) if text.lower().startswith(("0x", "+0x", "-0x")) else int(text, 10)
-    except ValueError as exc:
-        raise ValueError("Use a decimal integer or a 0x-prefixed hexadecimal value.") from exc
-    if number <= 0:
-        raise ValueError("A private-key candidate must be a positive integer.")
-    return number
-
-
-def test_candidate(public_key: ec.EllipticCurvePublicKey, candidate: int) -> bool:
-    try:
-        derived = ec.derive_private_key(candidate, public_key.curve).public_key()
-    except (ValueError, OverflowError):
-        return False
-    return derived.public_numbers() == public_key.public_numbers()
-
-
 def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable[int]) -> int | None:
     tested = 0
     matches = 0
@@ -185,36 +154,6 @@ def check_candidates(public_key: ec.EllipticCurvePublicKey, candidates: Iterable
     print(f"  Candidates tested: {tested:,}")
     print(Style.paint("  Only matching candidate values are displayed.", Style.DIM))
     return matching_scalar
-
-
-def read_candidates(path: Path) -> list[int]:
-    candidates: list[int] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        value = line.split("#", 1)[0].strip()
-        if not value:
-            continue
-        try:
-            candidates.append(parse_candidate(value))
-        except ValueError as exc:
-            raise ValueError(f"{path}:{line_number}: {exc}") from exc
-    if not candidates:
-        raise ValueError("The candidate file contains no usable values.")
-    return candidates
-
-
-def parse_range(spec: str) -> range:
-    try:
-        start_text, end_text = spec.split(":", 1)
-        start = parse_candidate(start_text)
-        end = parse_candidate(end_text)
-    except ValueError as exc:
-        raise ValueError("Range must use START:END, for example 1:1000.") from exc
-    if end < start:
-        raise ValueError("Range END must be greater than or equal to START.")
-    count = end - start + 1
-    if count > MAX_RANGE_CANDIDATES:
-        raise ValueError(f"Range contains {count:,} values; limit is {MAX_RANGE_CANDIDATES:,}.")
-    return range(start, end + 1)
 
 
 def load_or_reuse_certificate(current_path: Path | None, current_cert: x509.Certificate | None):
