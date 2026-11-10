@@ -35,9 +35,15 @@ def generate_server_certificate(
     dns_names: tuple[str, ...] | list[str],
     validity_days: int,
     output_dir: Path,
-    allowed_dns_suffixes: tuple[str, ...],
+    allowed_dns_suffixes: tuple[str, ...] | list[str],
 ) -> dict[str, Path]:
     """Verify the CA scalar, issue a scoped TLS certificate, and write outputs without overwriting."""
+    if not isinstance(intermediate, x509.Certificate):
+        raise ValueError("The intermediate must be an X.509 certificate.")
+    if not isinstance(subject_cn, str):
+        raise ValueError("Subject CN must be a DNS name string.")
+    if not isinstance(dns_names, (tuple, list)):
+        raise ValueError("SAN DNS names must be supplied as a list or tuple.")
     if type(private_scalar) is not int or private_scalar <= 0:
         raise ValueError("The private scalar must be a positive integer.")
     if type(validity_days) is not int or not 1 <= validity_days <= MAX_VALIDITY_DAYS:
@@ -68,7 +74,7 @@ def generate_server_certificate(
     if ca_private.public_key().public_numbers() != ca_public.public_numbers():
         raise ValueError("NO MATCH: the supplied scalar does not correspond to this CA certificate.")
 
-    normalized_names = validate_dns_names(list(dns_names), allowed_dns_suffixes)
+    normalized_names = validate_dns_names(dns_names, allowed_dns_suffixes)
     normalized_cn = validate_dns_names([subject_cn], allowed_dns_suffixes)[0]
     if normalized_cn not in normalized_names:
         raise ValueError("Subject CN must be one of the SAN DNS names.")
