@@ -12,6 +12,7 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from .profile import MAX_VALIDITY_DAYS, validate_dns_names
 
+
 def _certificate_time(cert: x509.Certificate, utc_name: str, legacy_name: str) -> datetime:
     value = getattr(cert, utc_name, None)
     if value is None:
@@ -37,11 +38,14 @@ def generate_server_certificate(
     allowed_dns_suffixes: tuple[str, ...],
 ) -> dict[str, Path]:
     """Verify the CA scalar, issue a scoped TLS certificate, and write outputs without overwriting."""
+    if type(private_scalar) is not int or private_scalar <= 0:
+        raise ValueError("The private scalar must be a positive integer.")
+    if type(validity_days) is not int or not 1 <= validity_days <= MAX_VALIDITY_DAYS:
+        raise ValueError(f"Validity must be an integer between 1 and {MAX_VALIDITY_DAYS} days.")
+
     ca_public = intermediate.public_key()
     if not isinstance(ca_public, ec.EllipticCurvePublicKey):
         raise ValueError("The supplied certificate does not contain an EC public key.")
-    if private_scalar <= 0:
-        raise ValueError("The private scalar must be a positive integer.")
 
     try:
         constraints = intermediate.extensions.get_extension_for_class(x509.BasicConstraints).value
@@ -56,8 +60,6 @@ def generate_server_certificate(
     ca_not_after = _certificate_time(intermediate, "not_valid_after_utc", "not_valid_after")
     if not ca_not_before <= now <= ca_not_after:
         raise ValueError("The intermediate CA certificate is not currently valid.")
-    if not 1 <= validity_days <= MAX_VALIDITY_DAYS:
-        raise ValueError(f"Validity must be between 1 and {MAX_VALIDITY_DAYS} days.")
 
     try:
         ca_private = ec.derive_private_key(private_scalar, ca_public.curve)
