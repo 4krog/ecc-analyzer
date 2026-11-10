@@ -14,7 +14,7 @@ from cryptography import __version__ as cryptography_version
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from certificate_generator import generate_server_certificate, load_profile
+from ecc_analyzer.certificates import generate_server_certificate, load_profile
 from ecc_analyzer.core.candidates import (
     parse_candidate,
     parse_range,
