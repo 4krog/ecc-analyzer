@@ -25,7 +25,7 @@ class CandidateCoreTests(unittest.TestCase):
         self.assertEqual(parse_candidate("  123_456_789  "), self.scalar)
 
     def test_parse_candidate_rejects_non_positive_or_invalid_values(self):
-        for value in ("", "0", "-1", "not-a-number"):
+        for value in ("", "0", "-1", "not-a-number", 123):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_candidate(value)
 
@@ -33,11 +33,13 @@ class CandidateCoreTests(unittest.TestCase):
         self.assertTrue(test_candidate(self.public_key, self.scalar))
         self.assertFalse(test_candidate(self.public_key, self.scalar + 1))
         self.assertFalse(test_candidate(self.public_key, 0))
+        self.assertFalse(test_candidate(self.public_key, True))
+        self.assertFalse(test_candidate(self.public_key, 1.5))
 
     def test_find_matching_candidates_deduplicates_values(self):
         matches = find_matching_candidates(
             self.public_key,
-            [self.scalar, self.scalar + 1, self.scalar, 0],
+            [self.scalar, self.scalar + 1, self.scalar, 0, True, 1.5],
         )
         self.assertEqual(matches, (self.scalar,))
 
@@ -47,6 +49,9 @@ class CandidateCoreTests(unittest.TestCase):
             parse_range("1:11", maximum=10)
         with self.assertRaises(ValueError):
             parse_range("5:3")
+        for maximum in (True, 0, -1, 2.5):
+            with self.subTest(maximum=maximum), self.assertRaises(ValueError):
+                parse_range("1:2", maximum=maximum)
 
     def test_read_candidates_supports_comments_and_hex(self):
         with tempfile.TemporaryDirectory() as temp:
