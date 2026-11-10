@@ -4,7 +4,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from ecc_analyzer.core.candidates import (
+from ecc_analyzer.core import (
     find_matching_candidates,
     parse_candidate,
     parse_range,
