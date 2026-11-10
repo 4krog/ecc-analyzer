@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -193,8 +194,10 @@ def guided_analysis(path: Path | None, cert: x509.Certificate | None):
     return path, cert, matching_scalar
 
 
-def generate_certificate_interactive(cert: x509.Certificate, private_scalar: int) -> None:
-    profile = load_profile()
+def generate_certificate_interactive(
+    cert: x509.Certificate, private_scalar: int, profile_path: Path | None = None
+) -> None:
+    profile = load_profile(profile_path)
     print()
     separator()
     print(Style.paint("  PROOF-OF-IMPACT CERTIFICATE", Style.BOLD))
@@ -224,7 +227,7 @@ def generate_certificate_interactive(cert: x509.Certificate, private_scalar: int
     print(Style.paint("  The generated server private key is unencrypted; protect and delete it after the lab.", Style.YELLOW))
 
 
-def main_menu() -> int:
+def main_menu(profile_path: Path | None = None) -> int:
     cert_path: Path | None = None
     cert: x509.Certificate | None = None
     verified_scalar: int | None = None
@@ -317,7 +320,7 @@ def main_menu() -> int:
                     raise ValueError("Load an intermediate CA certificate first.")
                 if verified_scalar is None:
                     raise ValueError("Certificate generation is locked: verify a matching private-key candidate first.")
-                generate_certificate_interactive(cert, verified_scalar)
+                generate_certificate_interactive(cert, verified_scalar, profile_path)
                 pause()
             elif choice == "0":
                 print(Style.paint("\n  4KROG · Analysis session closed.\n", Style.DIM))
@@ -331,8 +334,14 @@ def main_menu() -> int:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Inspect EC certificates and verify supplied private-key candidates.")
+    parser.add_argument(
+        "--profile", type=Path, default=None,
+        help="JSON certificate profile for proof-of-impact generation (default: profiles/default.json).",
+    )
+    args = parser.parse_args()
     try:
-        raise SystemExit(main_menu())
+        raise SystemExit(main_menu(args.profile))
     except (KeyboardInterrupt, EOFError):
         print("\n\n  Session interrupted. Goodbye.")
         raise SystemExit(130)
