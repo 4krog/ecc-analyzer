@@ -35,6 +35,12 @@ class CandidateCoreTests(unittest.TestCase):
         self.assertFalse(test_candidate(self.public_key, 0))
         self.assertFalse(test_candidate(self.public_key, True))
         self.assertFalse(test_candidate(self.public_key, 1.5))
+        with self.assertRaisesRegex(ValueError, "public_key must be"):
+            test_candidate(object(), self.scalar)
+
+    def test_find_matching_candidates_rejects_invalid_public_key(self):
+        with self.assertRaisesRegex(ValueError, "public_key must be"):
+            find_matching_candidates(object(), [self.scalar])
 
     def test_find_matching_candidates_deduplicates_values(self):
         matches = find_matching_candidates(
