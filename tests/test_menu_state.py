@@ -1,5 +1,4 @@
 import contextlib
-import importlib.util
 import io
 import tempfile
 import unittest
@@ -8,17 +7,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from ecc_analyzer import cli as ecc_analyzer
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
-
-
-MODULE_PATH = Path(__file__).resolve().parents[1] / "ecc-analyzer.py"
-SPEC = importlib.util.spec_from_file_location("ecc_analyzer", MODULE_PATH)
-ecc_analyzer = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(ecc_analyzer)
-
 
 def make_intermediate():
     scalar = 123456789
