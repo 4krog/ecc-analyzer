@@ -54,6 +54,23 @@ from ecc_analyzer.certificates import load_certificate, load_profile
 
 `test_candidate(public_key, candidate)` checks a supplied positive scalar against an EC public key. It does not discover or recover private keys. Certificate issuance is intended for authorized labs and enforces the selected profile's DNS suffix allowlist.
 
+### API input and error behavior
+
+The public API uses the following predictable error conventions:
+
+| Function | Invalid input / failure behavior |
+| --- | --- |
+| `parse_candidate`, `parse_range` | Raise `ValueError` for malformed values or invalid bounds. |
+| `test_candidate` | Raise `ValueError` for a non-EC public key; return `False` for an invalid candidate scalar. |
+| `find_matching_candidates` | Raise `ValueError` for a non-EC public key; ignore non-integer candidate elements; a non-iterable input raises `TypeError`. |
+| `read_candidates` | Raise `ValueError` for malformed/empty files; preserve filesystem errors (`FileNotFoundError`, `OSError`) and UTF-8 decoding errors. |
+| `load_certificate` | Raise `ValueError` for malformed/non-EC certificates; preserve filesystem errors. |
+| `load_profile` | Raise `ValueError` for malformed JSON or invalid profile contents; preserve filesystem errors. |
+| `validate_dns_names` | Raise `ValueError` for invalid names, suffixes, or names outside the allowlist. |
+| `generate_server_certificate` | Raise `ValueError` for invalid CA/scalar/profile data, `FileExistsError` rather than overwriting outputs, and `OSError` for filesystem failures. |
+
+Path-taking functions accept strings and path-like objects. Exceptions from caller-provided iterables and unexpected failures in the underlying cryptography library are not silently swallowed. The CLI may display these errors in a user-friendly form, but the library API preserves the documented distinction between validation and filesystem failures.
+
 
 ## Usage
 
