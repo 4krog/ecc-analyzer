@@ -37,3 +37,12 @@ jobs:
 
       - name: Run test suite
         run: python -m unittest discover -s tests -v
+
+      - name: Build wheel and verify installed package outside checkout
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python -m venv /tmp/ecc-analyzer-venv
+          /tmp/ecc-analyzer-venv/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/ecc-analyzer-venv/bin/ecc-analyzer --help
+          /tmp/ecc-analyzer-venv/bin/python -c "from ecc_analyzer.certificates import load_profile; p = load_profile(); assert p.subject_cn == 'service.example.test'; print('Installed package and bundled profile: OK')"
