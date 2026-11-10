@@ -17,6 +17,8 @@ MAX_RANGE_CANDIDATES = 100_000
 
 def parse_candidate(value: str) -> int:
     """Parse a positive decimal or 0x-prefixed hexadecimal scalar candidate."""
+    if not isinstance(value, str):
+        raise ValueError("Candidate must be supplied as text.")
     text = value.strip().replace("_", "")
     if not text:
         raise ValueError("Empty candidate.")
@@ -31,7 +33,8 @@ def parse_candidate(value: str) -> int:
 
 def test_candidate(public_key: ec.EllipticCurvePublicKey, candidate: int) -> bool:
     """Return whether candidate * G equals the supplied EC public point."""
-    if candidate <= 0:
+    # bool is an int subclass in Python, but it is not a valid scalar input.
+    if type(candidate) is not int or candidate <= 0:
         return False
     try:
         derived = ec.derive_private_key(candidate, public_key.curve).public_key()
@@ -42,6 +45,7 @@ def test_candidate(public_key: ec.EllipticCurvePublicKey, candidate: int) -> boo
 
 def read_candidates(path: Path) -> list[int]:
     """Read decimal/hex candidates from a text file; ignore blanks and # comments."""
+    path = Path(path)
     candidates: list[int] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         value = line.split("#", 1)[0].strip()
@@ -58,11 +62,13 @@ def read_candidates(path: Path) -> list[int]:
 
 def parse_range(spec: str, maximum: int = MAX_RANGE_CANDIDATES) -> range:
     """Parse an inclusive START:END range with a defensive candidate-count limit."""
+    if type(maximum) is not int or maximum < 1:
+        raise ValueError("Range maximum must be a positive integer.")
     try:
         start_text, end_text = spec.split(":", 1)
         start = parse_candidate(start_text)
         end = parse_candidate(end_text)
-    except ValueError as exc:
+    except (AttributeError, ValueError) as exc:
         raise ValueError("Range must use START:END, for example 1:1000.") from exc
     if end < start:
         raise ValueError("Range END must be greater than or equal to START.")
@@ -80,6 +86,8 @@ def find_matching_candidates(
     matches: list[int] = []
     seen: set[int] = set()
     for candidate in candidates:
+        if type(candidate) is not int:
+            continue
         if candidate in seen:
             continue
         seen.add(candidate)
