@@ -67,7 +67,7 @@ def generate_server_certificate(
         raise ValueError("NO MATCH: the supplied scalar does not correspond to this CA certificate.")
 
     normalized_names = validate_dns_names(list(dns_names), allowed_dns_suffixes)
-    normalized_cn = _normalize_dns_name(subject_cn)
+    normalized_cn = validate_dns_names([subject_cn], allowed_dns_suffixes)[0]
     if normalized_cn not in normalized_names:
         raise ValueError("Subject CN must be one of the SAN DNS names.")
 
