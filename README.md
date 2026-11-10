@@ -43,6 +43,18 @@ python -m pip install .
 
 This installs the reusable `ecc_analyzer` Python package and the `ecc-analyzer` terminal command. For development, install with `python -m pip install -e .`.
 
+## Reusable Python API
+
+The supported import surfaces are `ecc_analyzer.core` for candidate analysis and `ecc_analyzer.certificates` for certificate operations. Their exported names are explicit; internal modules may change without being part of the compatibility promise.
+
+```python
+from ecc_analyzer.core import parse_candidate, test_candidate, find_matching_candidates
+from ecc_analyzer.certificates import load_certificate, load_profile
+```
+
+`test_candidate(public_key, candidate)` checks a supplied positive scalar against an EC public key. It does not discover or recover private keys. Certificate issuance is intended for authorized labs and enforces the selected profile's DNS suffix allowlist.
+
+
 ## Usage
 
 Start the installed interactive application with the generic, reserved lab profile:
