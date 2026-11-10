@@ -103,6 +103,24 @@ class CertificateGeneratorTests(unittest.TestCase):
             validate_dns_names(["BAnco.4krog.test", "api.4krog.test"], (".4krog.test",)),
             ["banco.4krog.test", "api.4krog.test"],
         )
+        self.assertEqual(
+            validate_dns_names(["service.example.test."], [".EXAMPLE.TEST."]),
+            ["service.example.test"],
+        )
+
+    def test_dns_scope_rejects_invalid_public_api_types(self):
+        invalid_inputs = (
+            (None, (".example.test",)),
+            ([], (".example.test",)),
+            ([None], (".example.test",)),
+            (["service.example.test"], ()),
+            (["service.example.test"], [None]),
+            (["service.example.test"], ["example.test"]),
+            (["service.example.test"], [".example..test"]),
+        )
+        for names, suffixes in invalid_inputs:
+            with self.subTest(names=names, suffixes=suffixes), self.assertRaises(ValueError):
+                validate_dns_names(names, suffixes)
 
     def test_issued_certificate_is_signed_and_outputs_are_protected(self):
         ca_key, intermediate = make_intermediate()
