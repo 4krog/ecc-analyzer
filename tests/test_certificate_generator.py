@@ -177,6 +177,24 @@ class CertificateGeneratorTests(unittest.TestCase):
                         (".4krog.test",),
                     )
 
+    def test_public_issuer_rejects_malformed_dns_api_inputs(self):
+        ca_key, intermediate = make_intermediate()
+        scalar = ca_key.private_numbers().private_value
+        with tempfile.TemporaryDirectory() as temp:
+            for invalid_names in (None, "banco.4krog.test", [None]):
+                with self.subTest(dns_names=invalid_names), self.assertRaises(ValueError):
+                    generate_server_certificate(
+                        intermediate, scalar, "banco.4krog.test",
+                        invalid_names, 7, Path(temp) / "names",
+                        (".4krog.test",),
+                    )
+            with self.assertRaisesRegex(ValueError, "intermediate must be"):
+                generate_server_certificate(
+                    object(), scalar, "banco.4krog.test",
+                    ["banco.4krog.test"], 7, Path(temp) / "cert",
+                    (".4krog.test",),
+                )
+
     def test_wrong_scalar_is_rejected(self):
         _, intermediate = make_intermediate()
         with tempfile.TemporaryDirectory() as temp:
