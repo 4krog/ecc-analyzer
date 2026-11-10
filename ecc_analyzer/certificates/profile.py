@@ -39,9 +39,10 @@ def load_profile(path: Path | None = None) -> CertificateProfile:
             raise ValueError("Profile validity_days must be an integer.")
         if not isinstance(data["allowed_dns_suffixes"], list) or not data["allowed_dns_suffixes"] or not all(isinstance(item, str) for item in data["allowed_dns_suffixes"]):
             raise ValueError("Profile allowed_dns_suffixes must be a non-empty list of strings.")
-        suffixes = tuple(item.lower() for item in data["allowed_dns_suffixes"])
-        if any(not re.fullmatch(r"\.[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", suffix) for suffix in suffixes):
-            raise ValueError("Each allowed DNS suffix must start with one dot and contain a valid DNS suffix.")
+        raw_suffixes = tuple(item.lower() for item in data["allowed_dns_suffixes"])
+        if any(not item.startswith(".") or item.startswith("..") for item in raw_suffixes):
+            raise ValueError("Each allowed DNS suffix must start with exactly one dot.")
+        suffixes = tuple("." + _normalize_dns_name(item[1:]) for item in raw_suffixes)
         profile = CertificateProfile(
             name=data["name"].strip(),
             subject_cn=data["subject_cn"].strip(),
