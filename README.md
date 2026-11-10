@@ -76,7 +76,7 @@ Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent 
 
 Option 6 is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained only in the running process and is not exported.
 
-The default profile is `profiles/default.json`, a generic lab configuration using the reserved `.example.test` namespace. The challenge-specific `profiles/el-ascensor-chino.json` remains available and is selected explicitly with `--profile`.
+The default profile is bundled inside the `ecc_analyzer` package and uses the reserved `.example.test` namespace. The challenge-specific `profiles/el-ascensor-chino.json` remains an external profile and is selected explicitly with `--profile`.
 
 A profile defines the display name, default Subject CN, default SAN DNS names, validity period, and allowed DNS suffixes. These values can be edited in the interactive prompts, but every SAN name must remain within the selected profile's configured suffix scope. Custom profiles should use reserved test namespaces or domains that you are explicitly authorized to assess. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
 
