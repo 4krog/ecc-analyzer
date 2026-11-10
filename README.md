@@ -43,11 +43,19 @@ python -m pip install -r requirements.txt
 
 ## Usage
 
-Start the interactive application:
+Start the interactive application with the generic, reserved lab profile:
 
 ```bash
 python ecc-analyzer.py
 ```
+
+Select a different JSON profile explicitly:
+
+```bash
+python ecc-analyzer.py --profile profiles/el-ascensor-chino.json
+```
+
+You can provide your own profile file with the same JSON structure. Use only DNS namespaces reserved for testing or domains you are explicitly authorized to assess. The profile's `allowed_dns_suffixes` setting is enforced when SAN names are entered.
 
 The menu lets you:
 
@@ -68,14 +76,9 @@ Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent 
 
 Option 6 is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained only in the running process and is not exported.
 
-The initial lab profile is `profiles/el-ascensor-chino.json`. It pre-fills:
+The default profile is `profiles/default.json`, a generic lab configuration using the reserved `.example.test` namespace. The challenge-specific `profiles/el-ascensor-chino.json` remains available and is selected explicitly with `--profile`.
 
-- Subject CN: `banco.4krog.test`
-- SAN DNS names: `banco.4krog.test`, `www.banco.4krog.test`, and `api.banco.4krog.test`
-- Validity: 7 days
-- Allowed DNS suffix: `.4krog.test`
-
-These values can be edited in the interactive prompts. DNS names must remain within the suffix configured by the selected profile. To use another authorized lab namespace with this build, edit this profile's defaults and allowed suffixes. The application currently loads this bundled profile by default. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
+A profile defines the display name, default Subject CN, default SAN DNS names, validity period, and allowed DNS suffixes. These values can be edited in the interactive prompts, but every SAN name must remain within the selected profile's configured suffix scope. Custom profiles should use reserved test namespaces or domains that you are explicitly authorized to assess. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
 
 The generator checks that the loaded certificate is a currently valid CA with `BasicConstraints CA:TRUE` and `KeyUsage keyCertSign`, verifies the candidate scalar against its EC public key, creates a separate server key and CSR, and verifies the issued certificate signature before writing output. It refuses to overwrite existing output files.
 
