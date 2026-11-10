@@ -14,6 +14,7 @@ from cryptography import __version__ as cryptography_version
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from ecc_analyzer import __version__
 from ecc_analyzer.certificates import generate_server_certificate, load_profile
 from ecc_analyzer.core.candidates import (
     parse_candidate,
@@ -24,7 +25,7 @@ from ecc_analyzer.core.candidates import (
 from ecc_analyzer.certificates.loader import load_certificate
 
 
-VERSION = "1.2.0"
+VERSION = __version__
 
 class Style:
     """Small ANSI styling helper; no third-party terminal UI dependency."""
