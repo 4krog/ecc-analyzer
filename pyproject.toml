@@ -24,6 +24,3 @@ ecc-analyzer = "ecc_analyzer.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["ecc_analyzer*"]
-
-[tool.setuptools.package-data]
-"ecc_analyzer.certificates" = ["profiles/*.json"]
