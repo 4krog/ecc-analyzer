@@ -71,13 +71,19 @@ class CertificateIssuanceTests(unittest.TestCase):
             )
             self.assertTrue(paths["fullchain"].read_bytes().endswith(ca.public_bytes(serialization.Encoding.PEM)))
 
-    def test_rejects_names_outside_reserved_test_namespace(self):
+    def test_accepts_valid_dns_names_outside_test_namespace(self):
         ca = make_intermediate()
         with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaisesRegex(ValueError, r"reserved lab namespace"):
-                generate_server_certificate(
-                    ca, 4, "example.com", ["example.com"], 7, temp_dir
-                )
+            paths = generate_server_certificate(
+                ca, 4, "service.example.com",
+                ["service.example.com", "api.example.org"], 7, temp_dir
+            )
+            self.assertTrue(paths["certificate"].is_file())
+            leaf = x509.load_pem_x509_certificate(paths["certificate"].read_bytes())
+            names = leaf.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            ).value.get_values_for_type(x509.DNSName)
+            self.assertEqual(names, ["service.example.com", "api.example.org"])
 
     def test_enforces_ca_permitted_dns_name_constraints(self):
         constraints = x509.NameConstraints(
