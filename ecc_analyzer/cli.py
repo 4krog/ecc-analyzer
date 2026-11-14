@@ -1,3 +1,4 @@
+import argparse
 #!/usr/bin/env python3
 """4KROG ECC Analyzer: inspect X.509 EC certificates and test supplied candidates."""
 
@@ -298,6 +299,10 @@ def main_menu() -> int:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="ECC Analyzer by 4KROG — inspect EC certificates and verify supplied private-key candidates."
+    )
+    parser.parse_args()
     try:
         return main_menu()
     except (KeyboardInterrupt, EOFError):
