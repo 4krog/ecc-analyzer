@@ -114,13 +114,15 @@ def generate_server_certificate(
 ) -> dict[str, Path]:
     """Verify a CA scalar and issue a TLS server certificate for valid DNS names.
 
-    The CA must be currently valid and authorized for certificate signing.
-    The scalar must match its EC public key. Existing output files are never
-    overwritten. DNS NameConstraints and CA EKU restrictions are enforced.
+    The supplied CA must be currently valid and authorized for certificate
+    signing. The scalar must match its EC public key. Existing output files are
+    never overwritten. DNS NameConstraints and CA EKU restrictions present on
+    the supplied CA certificate are enforced.
 
     This function verifies the generated certificate signature; it does not
-    build or validate the complete chain to a trusted root, hostname trust,
-    or revocation status.
+    build or validate the complete chain to a trusted root. Constraints or EKU
+    restrictions on ancestor CA certificates are therefore not evaluated, nor
+    are hostname trust or revocation status.
     """
     if not isinstance(intermediate, x509.Certificate):
         raise ValueError("The intermediate must be an X.509 certificate.")
