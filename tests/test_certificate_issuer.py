@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
@@ -69,7 +69,7 @@ class CertificateIssuanceTests(unittest.TestCase):
                 stat.S_IMODE(os.stat(paths["key"]).st_mode),
                 0o600,
             )
-            self.assertTrue(paths["fullchain"].read_bytes().endswith(ca.public_bytes(x509.Encoding.PEM)))
+            self.assertTrue(paths["fullchain"].read_bytes().endswith(ca.public_bytes(serialization.Encoding.PEM)))
 
     def test_rejects_names_outside_reserved_test_namespace(self):
         ca = make_intermediate()
