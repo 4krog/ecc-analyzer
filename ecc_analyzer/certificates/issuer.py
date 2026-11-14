@@ -1,4 +1,4 @@
-"""Issue TLS server certificates in reserved lab namespaces using a verified CA key."""
+"""Issue TLS server certificates using a verified CA key."""
 
 from __future__ import annotations
 
@@ -55,11 +55,6 @@ def _normalize_dns_names(names: tuple[str, ...] | list[str]) -> list[str]:
     normalized: list[str] = []
     for raw_name in names:
         name = _normalize_dns_name(raw_name)
-        if not name.endswith(".test"):
-            raise ValueError(
-                f"{name} is outside the reserved lab namespace. "
-                "Certificate generation is restricted to DNS names ending in .test."
-            )
         if name not in normalized:
             normalized.append(name)
     return normalized
@@ -115,7 +110,7 @@ def generate_server_certificate(
     validity_days: int,
     output_dir: str | Path,
 ) -> dict[str, Path]:
-    """Verify a CA scalar and issue a TLS server certificate for the reserved .test namespace.
+    """Verify a CA scalar and issue a TLS server certificate for valid DNS names.
 
     The CA must be currently valid and authorized for certificate signing.
     The scalar must match its EC public key. Existing output files are never
@@ -173,8 +168,6 @@ def generate_server_certificate(
 
     normalized_names = _normalize_dns_names(dns_names)
     normalized_cn = _normalize_dns_name(subject_cn)
-    if not normalized_cn.endswith(".test"):
-        raise ValueError("Subject CN must use the reserved .test namespace.")
     if normalized_cn not in normalized_names:
         raise ValueError("Subject CN must be one of the SAN DNS names.")
     _enforce_name_constraints(intermediate, normalized_names)
