@@ -79,13 +79,18 @@ class CertificateGeneratorTests(unittest.TestCase):
                     ["banco.4krog.test"], 7, output,
                 )
 
-    def test_dns_names_are_restricted_to_reserved_test_namespace(self):
+    def test_accepts_valid_dns_names_outside_test_namespace(self):
         _, intermediate = make_intermediate(scalar=4)
         with tempfile.TemporaryDirectory() as temp:
-            with self.assertRaisesRegex(ValueError, "reserved lab namespace"):
-                generate_server_certificate(
-                    intermediate, 4, "example.com", ["example.com"], 7, temp,
-                )
+            result = generate_server_certificate(
+                intermediate, 4, "service.example.com",
+                ["service.example.com", "api.example.org"], 7, temp,
+            )
+            issued = x509.load_pem_x509_certificate(result["certificate"].read_bytes())
+            names = issued.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            ).value.get_values_for_type(x509.DNSName)
+            self.assertEqual(names, ["service.example.com", "api.example.org"])
 
     def test_dns_name_constraints_permitted_subtrees_are_enforced(self):
         constraints = x509.NameConstraints(
