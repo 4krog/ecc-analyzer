@@ -100,7 +100,7 @@ class CertificateIssuanceTests(unittest.TestCase):
         )
         ca = make_intermediate(name_constraints=constraints)
         with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaisesRegex(ValueError, "invalid DNS name constraint"):
+            with self.assertRaisesRegex(ValueError, "Invalid DNS name"):
                 generate_server_certificate(
                     ca, 4, "service.example.com", ["service.example.com"], 7, temp_dir
                 )
