@@ -1,17 +1,18 @@
-"""Issue lab-scoped TLS certificates using a verified intermediate CA key."""
+"""Issue TLS server certificates in reserved lab namespaces using a verified CA key."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
+import re
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-from .profile import MAX_VALIDITY_DAYS, validate_dns_names
+MAX_VALIDITY_DAYS = 397
 
 
 def _certificate_time(cert: x509.Certificate, utc_name: str, legacy_name: str) -> datetime:
@@ -29,6 +30,83 @@ def _signature_hash(public_key: ec.EllipticCurvePublicKey) -> hashes.HashAlgorit
     return hashes.SHA256()
 
 
+def _normalize_dns_name(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("DNS names must be strings.")
+    name = value.strip().rstrip(".").lower()
+    if not name or len(name) > 253 or "*" in name:
+        raise ValueError(f"Invalid DNS name: {value!r}")
+    try:
+        ascii_name = name.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise ValueError(f"Invalid DNS name: {value!r}") from exc
+    labels = ascii_name.split(".")
+    if len(ascii_name) > 253 or len(labels) < 2 or any(
+        not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+        for label in labels
+    ):
+        raise ValueError(f"Invalid DNS name: {value!r}")
+    return ascii_name
+
+
+def _normalize_dns_names(names: tuple[str, ...] | list[str]) -> list[str]:
+    if not isinstance(names, (tuple, list)) or not names:
+        raise ValueError("At least one SAN DNS name is required.")
+    normalized: list[str] = []
+    for raw_name in names:
+        name = _normalize_dns_name(raw_name)
+        if not name.endswith(".test"):
+            raise ValueError(
+                f"{name} is outside the reserved lab namespace. "
+                "Certificate generation is restricted to DNS names ending in .test."
+            )
+        if name not in normalized:
+            normalized.append(name)
+    return normalized
+
+
+def _normalize_dns_constraint(value: str) -> tuple[bool, str]:
+    if not isinstance(value, str):
+        raise ValueError("The CA certificate contains an invalid DNS name constraint.")
+    subdomains_only = value.startswith(".")
+    base = value[1:] if subdomains_only else value
+    if not base or base.startswith("."):
+        raise ValueError("The CA certificate contains an invalid DNS name constraint.")
+    return subdomains_only, _normalize_dns_name(base)
+
+
+def _matches_dns_constraint(name: str, constraint: tuple[bool, str]) -> bool:
+    subdomains_only, base = constraint
+    if subdomains_only:
+        return name.endswith("." + base)
+    return name == base or name.endswith("." + base)
+
+
+def _enforce_name_constraints(intermediate: x509.Certificate, dns_names: list[str]) -> None:
+    """Apply DNS NameConstraints from the issuing CA to every requested DNS name."""
+    try:
+        extension = intermediate.extensions.get_extension_for_class(x509.NameConstraints).value
+    except x509.ExtensionNotFound:
+        return
+
+    permitted = [
+        _normalize_dns_constraint(item.value)
+        for item in (extension.permitted_subtrees or ())
+        if isinstance(item, x509.DNSName)
+    ]
+    excluded = [
+        _normalize_dns_constraint(item.value)
+        for item in (extension.excluded_subtrees or ())
+        if isinstance(item, x509.DNSName)
+    ]
+
+    for name in dns_names:
+        if any(_matches_dns_constraint(name, item) for item in excluded):
+            raise ValueError(f"{name} is excluded by the intermediate CA NameConstraints.")
+        if permitted and not any(_matches_dns_constraint(name, item) for item in permitted):
+            raise ValueError(f"{name} is outside the intermediate CA permitted DNS NameConstraints.")
+
+
 def generate_server_certificate(
     intermediate: x509.Certificate,
     private_scalar: int,
@@ -36,20 +114,16 @@ def generate_server_certificate(
     dns_names: tuple[str, ...] | list[str],
     validity_days: int,
     output_dir: str | Path,
-    allowed_dns_suffixes: tuple[str, ...] | list[str],
 ) -> dict[str, Path]:
-    """Verify the CA scalar and issue a profile-scoped TLS server certificate.
+    """Verify a CA scalar and issue a TLS server certificate for the reserved .test namespace.
 
-    The intermediate must be a currently valid EC CA with certificate-signing
-    key usage, and private_scalar must match its public key. Output files are
-    created exclusively and existing files are never overwritten.
+    The CA must be currently valid and authorized for certificate signing.
+    The scalar must match its EC public key. Existing output files are never
+    overwritten. DNS NameConstraints and CA EKU restrictions are enforced.
 
-    Raises:
-        ValueError: Invalid CA, scalar, validity, DNS scope, or certificate data.
-        FileExistsError: Any target output file already exists.
-        OSError: The output directory or files cannot be created/written.
-        TypeError: output_dir is not path-like or an underlying cryptography
-            operation receives an unsupported value.
+    This function verifies the generated certificate signature; it does not
+    build or validate the complete chain to a trusted root, hostname trust,
+    or revocation status.
     """
     if not isinstance(intermediate, x509.Certificate):
         raise ValueError("The intermediate must be an X.509 certificate.")
@@ -74,8 +148,6 @@ def generate_server_certificate(
     if not constraints.ca or not usage.key_cert_sign:
         raise ValueError("The supplied certificate is not authorized to sign certificates.")
 
-    # An EKU on a CA constrains the purposes of certificates issued below it.
-    # Absence of EKU leaves the CA unrestricted by this extension.
     try:
         ca_eku = intermediate.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
     except x509.ExtensionNotFound:
@@ -99,10 +171,13 @@ def generate_server_certificate(
     if ca_private.public_key().public_numbers() != ca_public.public_numbers():
         raise ValueError("NO MATCH: the supplied scalar does not correspond to this CA certificate.")
 
-    normalized_names = validate_dns_names(dns_names, allowed_dns_suffixes)
-    normalized_cn = validate_dns_names([subject_cn], allowed_dns_suffixes)[0]
+    normalized_names = _normalize_dns_names(dns_names)
+    normalized_cn = _normalize_dns_name(subject_cn)
+    if not normalized_cn.endswith(".test"):
+        raise ValueError("Subject CN must use the reserved .test namespace.")
     if normalized_cn not in normalized_names:
         raise ValueError("Subject CN must be one of the SAN DNS names.")
+    _enforce_name_constraints(intermediate, normalized_names)
 
     not_before = max(now - timedelta(minutes=5), ca_not_before)
     not_after = min(now + timedelta(days=validity_days), ca_not_after)
@@ -142,7 +217,6 @@ def generate_server_certificate(
         .sign(ca_private, digest)
     )
 
-    # Verify the issued certificate's signature before writing any private material.
     ca_public.verify(
         certificate.signature,
         certificate.tbs_certificate_bytes,
@@ -176,9 +250,6 @@ def generate_server_certificate(
     }
     created: list[Path] = []
     try:
-        # os.open applies 0600 atomically at creation (and the process umask
-        # can only make the permissions more restrictive), avoiding a window
-        # in which the private key could be created with broader permissions.
         key_fd = os.open(paths["key"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         created.append(paths["key"])
         with os.fdopen(key_fd, "wb") as output:
