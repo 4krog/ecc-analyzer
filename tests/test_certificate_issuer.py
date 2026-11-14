@@ -97,6 +97,18 @@ class CertificateIssuanceTests(unittest.TestCase):
                     ca, 4, "other.test", ["other.test"], 7, temp_dir
                 )
 
+    def test_enforces_single_label_dns_constraint_bases(self):
+        constraints = x509.NameConstraints(
+            permitted_subtrees=[x509.DNSName("com")],
+            excluded_subtrees=None,
+        )
+        ca = make_intermediate(name_constraints=constraints)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = generate_server_certificate(
+                ca, 4, "service.example.com", ["service.example.com"], 7, temp_dir
+            )
+            self.assertTrue(paths["certificate"].is_file())
+
     def test_enforces_ca_excluded_dns_name_constraints(self):
         constraints = x509.NameConstraints(
             permitted_subtrees=None,
