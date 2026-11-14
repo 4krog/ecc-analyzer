@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -15,7 +14,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from ecc_analyzer import __version__
-from ecc_analyzer.certificates import generate_server_certificate, load_profile
+from ecc_analyzer.certificates import generate_server_certificate
 from ecc_analyzer.core.candidates import (
     parse_candidate,
     parse_range,
@@ -169,50 +168,17 @@ def load_or_reuse_certificate(current_path: Path | None, current_cert: x509.Cert
     return path, cert
 
 
-def guided_analysis(path: Path | None, cert: x509.Certificate | None):
-    path, cert = load_or_reuse_certificate(path, cert)
-    public_key = inspect_certificate(cert, path)
-    print("\n  Choose candidate source:")
-    print("  [1] One candidate")
-    print("  [2] Manual list (comma-separated)")
-    print("  [3] Candidate file")
-    print("  [4] Numeric range")
-    choice = input("\n  Source > ").strip()
-
-    if choice == "1":
-        candidates = [parse_candidate(input("  Candidate (decimal or 0x hex): "))]
-    elif choice == "2":
-        raw = input("  Candidates (comma-separated): ")
-        candidates = [parse_candidate(item) for item in raw.split(",") if item.strip()]
-        if not candidates:
-            raise ValueError("No candidates supplied.")
-    elif choice == "3":
-        candidate_path = ask_path("  Candidate file path: ")
-        candidates = read_candidates(candidate_path)
-    elif choice == "4":
-        candidates = parse_range(input("  Range START:END: "))
-    else:
-        raise ValueError("Unknown candidate source.")
-    matching_scalar = check_candidates(public_key, candidates)
-    return path, cert, matching_scalar
-
-
-def generate_certificate_interactive(
-    cert: x509.Certificate, private_scalar: int, profile_path: Path | None = None
-) -> None:
-    profile = load_profile(profile_path)
+def generate_certificate_interactive(cert: x509.Certificate, private_scalar: int) -> None:
     print()
     separator()
     print(Style.paint("  PROOF-OF-IMPACT CERTIFICATE", Style.BOLD))
     separator()
-    print(f"  Lab profile   : {profile.name}")
     print(f"  Issuer        : {cert.subject.rfc4514_string()} (taken from loaded CA certificate)")
-    subject_cn = input(f"  Subject CN [{profile.subject_cn}]: ").strip() or profile.subject_cn
-    default_names = ", ".join(profile.dns_names)
-    raw_names = input(f"  SAN DNS names [{default_names}]: ").strip() or default_names
+    subject_cn = input("  Subject CN: ").strip()
+    raw_names = input("  SAN DNS names (comma-separated): ").strip()
     dns_names = [item.strip() for item in raw_names.split(",") if item.strip()]
-    raw_days = input(f"  Validity days [{profile.validity_days}]: ").strip()
-    validity_days = int(raw_days) if raw_days else profile.validity_days
+    raw_days = input("  Validity days [7, maximum 397]: ").strip()
+    validity_days = int(raw_days) if raw_days else 7
     output_raw = input("  Output directory [player-output]: ").strip() or "player-output"
     paths = generate_server_certificate(
         intermediate=cert,
@@ -221,16 +187,16 @@ def generate_certificate_interactive(
         dns_names=dns_names,
         validity_days=validity_days,
         output_dir=normalize_path(output_raw),
-        allowed_dns_suffixes=profile.allowed_dns_suffixes,
     )
     print(Style.paint("\n  CERTIFICATE CREATED AND SIGNATURE VERIFIED", Style.GREEN + Style.BOLD))
     for label, path in paths.items():
         print(f"  {label:12}: {path}")
     print(Style.paint("  Note: this verifies the issued certificate signature, not client trust, hostname validation, or revocation.", Style.DIM))
+    print(Style.paint("  DNS names must use the reserved .test namespace and satisfy CA NameConstraints.", Style.DIM))
     print(Style.paint("  The generated server private key is unencrypted; protect and delete it after the lab.", Style.YELLOW))
 
 
-def main_menu(profile_path: Path | None = None) -> int:
+def main_menu() -> int:
     cert_path: Path | None = None
     cert: x509.Certificate | None = None
     verified_scalar: int | None = None
@@ -244,8 +210,7 @@ def main_menu(profile_path: Path | None = None) -> int:
         print("  [2] Test single candidate")
         print("  [3] Test candidate list")
         print("  [4] Test numeric range")
-        print("  [5] Guided analysis")
-        print("  [6] Generate proof-of-impact certificate")
+        print("  [5] Generate proof-of-impact certificate")
         print("  [0] Exit")
         separator()
         if cert is not None and cert_path is not None:
@@ -315,15 +280,11 @@ def main_menu(profile_path: Path | None = None) -> int:
                 verified_scalar = check_candidates(cert.public_key(), candidates)
                 pause()
             elif choice == "5":
-                verified_scalar = None
-                cert_path, cert, verified_scalar = guided_analysis(cert_path, cert)
-                pause()
-            elif choice == "6":
                 if cert is None:
                     raise ValueError("Load an intermediate CA certificate first.")
                 if verified_scalar is None:
                     raise ValueError("Certificate generation is locked: verify a matching private-key candidate first.")
-                generate_certificate_interactive(cert, verified_scalar, profile_path)
+                generate_certificate_interactive(cert, verified_scalar)
                 pause()
             elif choice == "0":
                 print(Style.paint("\n  4KROG · Analysis session closed.\n", Style.DIM))
@@ -337,18 +298,8 @@ def main_menu(profile_path: Path | None = None) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="ECC Analyzer by 4KROG — inspect EC certificates and verify supplied private-key candidates."
-    )
-    parser.add_argument(
-        "--profile",
-        type=Path,
-        default=None,
-        help="External JSON profile for proof-of-impact generation (default: bundled generic profile).",
-    )
-    args = parser.parse_args()
     try:
-        return main_menu(args.profile)
+        return main_menu()
     except (KeyboardInterrupt, EOFError):
         print("\n\n  Session interrupted. Goodbye.")
         return 130
