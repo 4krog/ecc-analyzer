@@ -193,7 +193,7 @@ def generate_certificate_interactive(cert: x509.Certificate, private_scalar: int
     for label, path in paths.items():
         print(f"  {label:12}: {path}")
     print(Style.paint("  Note: this verifies the issued certificate signature, not client trust, hostname validation, or revocation.", Style.DIM))
-    print(Style.paint("  DNS names must be valid and satisfy any CA NameConstraints.", Style.DIM))
+    print(Style.paint("  DNS NameConstraints and EKU are checked only on the loaded CA certificate; ancestor CA restrictions are not evaluated.", Style.DIM))
     print(Style.paint("  The generated server private key is unencrypted; protect and delete it after the lab.", Style.YELLOW))
 
 
