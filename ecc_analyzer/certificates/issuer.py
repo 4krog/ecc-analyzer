@@ -33,7 +33,9 @@ def _signature_hash(public_key: ec.EllipticCurvePublicKey) -> hashes.HashAlgorit
 def _normalize_dns_name(value: str, *, allow_single_label: bool = False) -> str:
     if not isinstance(value, str):
         raise ValueError("DNS names must be strings.")
-    name = value.strip().rstrip(".").lower()
+    name = value.strip().lower()
+    if name.endswith("."):
+        name = name[:-1]
     if not name or len(name) > 253 or "*" in name:
         raise ValueError(f"Invalid DNS name: {value!r}")
     try:
