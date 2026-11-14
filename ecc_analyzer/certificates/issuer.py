@@ -30,7 +30,7 @@ def _signature_hash(public_key: ec.EllipticCurvePublicKey) -> hashes.HashAlgorit
     return hashes.SHA256()
 
 
-def _normalize_dns_name(value: str) -> str:
+def _normalize_dns_name(value: str, *, allow_single_label: bool = False) -> str:
     if not isinstance(value, str):
         raise ValueError("DNS names must be strings.")
     name = value.strip().rstrip(".").lower()
@@ -41,7 +41,7 @@ def _normalize_dns_name(value: str) -> str:
     except UnicodeError as exc:
         raise ValueError(f"Invalid DNS name: {value!r}") from exc
     labels = ascii_name.split(".")
-    if len(ascii_name) > 253 or len(labels) < 2 or any(
+    if len(ascii_name) > 253 or (len(labels) < 2 and not allow_single_label) or any(
         not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
         for label in labels
     ):
@@ -67,7 +67,7 @@ def _normalize_dns_constraint(value: str) -> tuple[bool, str]:
     base = value[1:] if subdomains_only else value
     if not base or base.startswith("."):
         raise ValueError("The CA certificate contains an invalid DNS name constraint.")
-    return subdomains_only, _normalize_dns_name(base)
+    return subdomains_only, _normalize_dns_name(base, allow_single_label=True)
 
 
 def _matches_dns_constraint(name: str, constraint: tuple[bool, str]) -> bool:
