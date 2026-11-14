@@ -1,9 +1,9 @@
-import argparse
 #!/usr/bin/env python3
 """4KROG ECC Analyzer: inspect X.509 EC certificates and test supplied candidates."""
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
