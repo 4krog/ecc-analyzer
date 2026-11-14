@@ -85,6 +85,26 @@ class CertificateIssuanceTests(unittest.TestCase):
             ).value.get_values_for_type(x509.DNSName)
             self.assertEqual(names, ["service.example.com", "api.example.org"])
 
+    def test_rejects_multiple_trailing_dots_in_dns_names(self):
+        ca = make_intermediate()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "Invalid DNS name"):
+                generate_server_certificate(
+                    ca, 4, "service.example.com..", ["service.example.com"], 7, temp_dir
+                )
+
+    def test_rejects_malformed_multiple_trailing_dots_in_ca_constraints(self):
+        constraints = x509.NameConstraints(
+            permitted_subtrees=[x509.DNSName(".example.com..")],
+            excluded_subtrees=None,
+        )
+        ca = make_intermediate(name_constraints=constraints)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "invalid DNS name constraint"):
+                generate_server_certificate(
+                    ca, 4, "service.example.com", ["service.example.com"], 7, temp_dir
+                )
+
     def test_enforces_ca_permitted_dns_name_constraints(self):
         constraints = x509.NameConstraints(
             permitted_subtrees=[x509.DNSName(".4krog.test")],
