@@ -4,7 +4,7 @@
 
 *Elliptic Curve Cryptography & Certificate Toolkit*
 
-A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates against those public keys.
+A lightweight interactive terminal utility to inspect X.509 certificates containing elliptic-curve (EC) public keys and test explicitly supplied private-key candidates.
 
 **Version:** 1.2.0
 
@@ -14,16 +14,15 @@ A lightweight interactive terminal utility to inspect X.509 certificates contain
 - Displays certificate metadata and EC public-key parameters.
 - Tests one candidate, a manually entered list, a candidate file, or a bounded numeric range.
 - Derives the public point for each candidate on the certificate's curve and compares it with the certificate public key.
-- Starts directly in an interactive terminal menu: no command-line arguments are required.
-- After a supplied candidate matches the loaded EC public key, can issue a lab-scoped TLS server certificate using that verified scalar.
-- Uses Python's standard library for the terminal interface and `cryptography` for cryptographic operations. No additional UI packages are required.
+- After a supplied candidate matches the loaded EC public key, can issue a proof-of-impact TLS server certificate using that verified scalar.
+- Uses Python's standard library for the terminal interface and `cryptography` for cryptographic operations.
 
 ## What it does not do
 
 - It does not recover arbitrary private keys or break ECDSA/ECC.
 - It does not brute-force the full key space.
 - It does not connect to remote hosts, scan networks, or exploit services.
-- It does not automatically validate a complete certificate trust chain, revocation status, or hostname matching.
+- It does not automatically validate a complete certificate trust chain, hostname trust, or revocation status.
 
 A match means only that the supplied integer derives the public key contained in the certificate. This demonstrates the danger of weak, predictable, or improperly generated private keys; it does not imply a weakness in the elliptic curve itself.
 
@@ -49,36 +48,18 @@ This installs the reusable `ecc_analyzer` Python package and the `ecc-analyzer` 
 
 ## Reusable Python API
 
-The supported import surfaces are `ecc_analyzer.core` for candidate analysis and `ecc_analyzer.certificates` for certificate operations. Their exported names are explicit; internal modules may change without being part of the compatibility promise.
+The supported import surfaces are `ecc_analyzer.core` for candidate analysis and `ecc_analyzer.certificates` for certificate operations.
 
 ```python
 from ecc_analyzer.core import parse_candidate, test_candidate, find_matching_candidates
-from ecc_analyzer.certificates import load_certificate, load_profile
+from ecc_analyzer.certificates import load_certificate, generate_server_certificate
 ```
 
-`test_candidate(public_key, candidate)` checks a supplied positive scalar against an EC public key. It does not discover or recover private keys. Certificate issuance is intended for authorized labs and enforces the selected profile's DNS suffix allowlist.
-
-### API input and error behavior
-
-The public API uses the following predictable error conventions:
-
-| Function | Invalid input / failure behavior |
-| --- | --- |
-| `parse_candidate`, `parse_range` | Raise `ValueError` for malformed values or invalid bounds. |
-| `test_candidate` | Raise `ValueError` for a non-EC public key; return `False` for an invalid candidate scalar. |
-| `find_matching_candidates` | Raise `ValueError` for a non-EC public key; ignore non-integer candidate elements; a non-iterable input raises `TypeError`. |
-| `read_candidates` | Raise `ValueError` for malformed/empty files; preserve filesystem errors (`FileNotFoundError`, `OSError`) and UTF-8 decoding errors. |
-| `load_certificate` | Raise `ValueError` for malformed/non-EC certificates; preserve filesystem errors. |
-| `load_profile` | Raise `ValueError` for malformed JSON or invalid profile contents; preserve filesystem errors. |
-| `validate_dns_names` | Raise `ValueError` for invalid names, suffixes, or names outside the allowlist. |
-| `generate_server_certificate` | Raise `ValueError` for invalid CA/scalar/profile data, `FileExistsError` rather than overwriting outputs, and `OSError` for filesystem failures. |
-
-Path-taking functions accept strings and path-like objects. Exceptions from caller-provided iterables and unexpected failures in the underlying cryptography library are not silently swallowed. The CLI may display these errors in a user-friendly form, but the library API preserves the documented distinction between validation and filesystem failures.
-
+`test_candidate(public_key, candidate)` checks a supplied positive scalar against an EC public key. It does not discover or recover private keys.
 
 ## Usage
 
-Start the installed interactive application with the generic, reserved lab profile:
+Start the interactive application:
 
 ```bash
 ecc-analyzer
@@ -90,24 +71,15 @@ When running directly from a source checkout, the compatibility launcher also re
 python ecc-analyzer.py
 ```
 
-Select a different JSON profile explicitly:
-
-```bash
-ecc-analyzer --profile profiles/el-ascensor-chino.json
-```
-
-You can provide your own profile file with the same JSON structure. Use only DNS namespaces reserved for testing or domains you are explicitly authorized to assess. The profile's `allowed_dns_suffixes` setting is enforced when SAN names are entered.
-
 The menu lets you:
 
 1. Load and inspect a PEM or DER certificate.
-
-File prompts accept absolute paths, relative paths, and paths beginning with `~/`. Relative paths are resolved from the directory where you launched the program (the current working directory), not from the location of the script.
 2. Test one decimal or hexadecimal candidate.
 3. Test a comma-separated manual list or load candidates from a text file.
 4. Test an inclusive numeric range.
-5. Run a guided analysis session.
-6. After a successful candidate match, generate a proof-of-impact TLS certificate signed by the loaded intermediate CA.
+5. After a successful candidate match, generate a proof-of-impact TLS certificate signed by the loaded intermediate CA.
+
+File prompts accept absolute paths, relative paths, and paths beginning with `~/`. Relative paths are resolved from the directory where you launched the program (the current working directory), not from the location of the script.
 
 Candidate files accept one decimal or `0x`-prefixed hexadecimal value per line. Blank lines and comments beginning with `#` are ignored.
 
@@ -115,17 +87,22 @@ Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent 
 
 ## Proof-of-impact certificate generation
 
-Option 6 is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained in memory for the current session and is not written to the generated files. When a match is found, the CLI displays the matching scalar in the terminal; treat terminal output and scrollback as sensitive.
+Certificate generation is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained in memory for the current session and is not written to the generated files. When a match is found, the CLI displays the matching scalar in the terminal; treat terminal output and scrollback as sensitive.
 
-The default profile is bundled inside the `ecc_analyzer` package and uses the reserved `.example.test` namespace. The challenge-specific `profiles/el-ascensor-chino.json` remains an external profile in a source checkout (or can be supplied from any path) and is selected explicitly with `--profile`.
+The generator asks for the Subject CN, SAN DNS names, validity period, and output directory. There are no JSON profiles or profile-specific defaults.
 
-A profile defines the display name, default Subject CN, default SAN DNS names, validity period, and allowed DNS suffixes. These values can be edited in the interactive prompts, but every SAN name must remain within the selected profile's configured suffix scope. Custom profiles should use reserved test namespaces or domains that you are explicitly authorized to assess. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
+The generator accepts any syntactically valid DNS name; it does not impose a fixed suffix allowlist. If the issuing CA certificate contains DNS `NameConstraints`, those restrictions are enforced. The Subject CN must be included in the SAN list. Wildcard names are not accepted. Validity is limited to 397 days and is clipped to the CA certificate's expiry.
 
-The generator checks that the loaded certificate is a currently valid CA with `BasicConstraints CA:TRUE` and `KeyUsage keyCertSign`, verifies the candidate scalar against its EC public key, creates a separate server key and CSR, and verifies the issued certificate signature before writing output. It refuses to overwrite existing output files.
+The generator checks that the loaded certificate is a currently valid CA with `BasicConstraints CA:TRUE` and `KeyUsage keyCertSign`. It enforces DNS `NameConstraints` and a CA EKU when present on that supplied certificate, verifies the candidate scalar against the CA's EC public key, creates a separate server key and CSR, and verifies the issued certificate signature before writing output. It refuses to overwrite existing output files. Because the generator receives only the issuing CA certificate, it does not evaluate constraints or EKU restrictions inherited from ancestor CA certificates.
 
-The output directory contains `server.key`, `server.csr`, `server.crt`, and `fullchain.pem`. The server private key is unencrypted PEM protected with filesystem mode `0600`; protect it as a secret. The generated full chain contains the leaf certificate and intermediate certificate, not the root certificate.
+The output directory contains:
 
-**Important:** successful signature verification does not mean a browser or operating system will trust the certificate. Trust-store installation, hostname validation, chain construction, validity, and revocation must be tested separately in the authorized lab.
+- `server.key`: unencrypted server private key, created with filesystem mode `0600`.
+- `server.csr`: certificate signing request.
+- `server.crt`: issued leaf certificate.
+- `fullchain.pem`: leaf certificate followed by the intermediate certificate (not the root).
+
+**Important:** successful signature verification does not mean a browser or operating system will trust the certificate. This tool does not build or validate the complete chain to a trusted root, perform hostname verification, or check revocation. Test those properties separately in the authorized lab.
 
 ## Tests
 
@@ -137,15 +114,11 @@ python -m unittest discover -s tests -v
 
 The tests create temporary EC CA certificates and temporary output files; they do not use production certificates or contact network services.
 
-## Terminal presentation
-
-The interface uses standard ANSI terminal colors when output is connected to a terminal. Successful match status labels are bold green, candidate identifiers are bold bright white, and a matching private-key candidate is displayed in bold red; non-matches are bold yellow, and errors are bold red. Set `NO_COLOR` to disable color output. No third-party terminal UI library is used.
-
 ## Security and responsible use
 
-Use this utility only with certificates and systems you own or are explicitly authorized to assess. Candidate testing should be restricted to controlled research and training environments. Never use intentionally weak test keys in production.
+Use this utility only with certificates and systems you own or are explicitly authorized to assess. Candidate testing and certificate issuance should be restricted to controlled research and training environments. Never use intentionally weak test keys in production.
 
-Only matching candidate values are echoed in result messages, in bold red. Treat candidate input, terminal scrollback, and local shell sessions as sensitive regardless.
+Only matching candidate values are echoed in result messages. Treat candidate input, terminal scrollback, generated private keys, and local shell sessions as sensitive.
 
 ## Technical note
 
