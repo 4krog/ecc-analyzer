@@ -91,7 +91,7 @@ Certificate generation is available only after a candidate has matched the publi
 
 The generator asks for the Subject CN, SAN DNS names, validity period, and output directory. There are no JSON profiles or profile-specific defaults.
 
-For safety, generated DNS names are restricted to the reserved `.test` namespace. The generator also enforces DNS `NameConstraints` present in the issuing CA certificate. The Subject CN must be included in the SAN list. Wildcard names are not accepted. Validity is limited to 397 days and is clipped to the CA certificate's expiry.
+The generator accepts any syntactically valid DNS name; it does not impose a fixed suffix allowlist. If the issuing CA certificate contains DNS `NameConstraints`, those restrictions are enforced. The Subject CN must be included in the SAN list. Wildcard names are not accepted. Validity is limited to 397 days and is clipped to the CA certificate's expiry.
 
 The generator checks that the loaded certificate is a currently valid CA with `BasicConstraints CA:TRUE` and `KeyUsage keyCertSign`. It enforces a CA EKU when present, verifies the candidate scalar against the CA's EC public key, creates a separate server key and CSR, and verifies the issued certificate signature before writing output. It refuses to overwrite existing output files.
 
