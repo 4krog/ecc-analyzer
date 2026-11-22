@@ -216,7 +216,7 @@ def main_menu(profile_path: Path | None = None) -> int:
         print("  [2] Test single candidate")
         print("  [3] Test candidate list")
         print("  [4] Test numeric range")
-        print("  [6] Generate proof-of-impact certificate")
+        print("  [5] Generate proof-of-impact certificate")
         print("  [0] Exit")
         separator()
         if cert is not None and cert_path is not None:
@@ -285,7 +285,7 @@ def main_menu(profile_path: Path | None = None) -> int:
                 candidates = parse_range(input("  Range START:END: "))
                 verified_scalar = check_candidates(cert.public_key(), candidates)
                 pause()
-            elif choice == "6":
+            elif choice == "5":
                 if cert is None:
                     raise ValueError("Load an intermediate CA certificate first.")
                 if verified_scalar is None:
