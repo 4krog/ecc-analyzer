@@ -1,4 +1,4 @@
-"""Issue lab-scoped TLS certificates using a verified intermediate CA key."""
+"""Issue TLS certificates using a verified intermediate CA key in authorized labs."""
 
 from __future__ import annotations
 
