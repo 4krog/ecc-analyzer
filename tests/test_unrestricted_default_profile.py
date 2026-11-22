@@ -24,6 +24,10 @@ class UnrestrictedDefaultProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_dns_names(["not a valid hostname"], [])
 
+    def test_explicit_suffix_allowlist_remains_enforced(self):
+        with self.assertRaises(ValueError):
+            validate_dns_names(["example.org"], [".example.test"])
+
 
 if __name__ == "__main__":
     unittest.main()
