@@ -56,7 +56,7 @@ from ecc_analyzer.core import parse_candidate, test_candidate, find_matching_can
 from ecc_analyzer.certificates import load_certificate, load_profile
 ```
 
-`test_candidate(public_key, candidate)` checks a supplied positive scalar against an EC public key. It does not discover or recover private keys. Certificate issuance is intended for authorized labs and enforces the selected profile's DNS suffix allowlist.
+`test_candidate(public_key, candidate)` checks a supplied positive scalar against an EC public key. It does not discover or recover private keys. Certificate issuance is intended for authorized labs. Custom profiles can enforce a DNS suffix allowlist; the bundled default profile leaves the suffix list empty.
 
 ### API input and error behavior
 
@@ -78,7 +78,7 @@ Path-taking functions accept strings and path-like objects. Exceptions from call
 
 ## Usage
 
-Start the installed interactive application with the generic, reserved lab profile:
+Start the installed interactive application with the bundled generic profile (no DNS suffix restriction):
 
 ```bash
 ecc-analyzer
@@ -96,7 +96,7 @@ Select a different JSON profile explicitly:
 ecc-analyzer --profile profiles/el-ascensor-chino.json
 ```
 
-You can provide your own profile file with the same JSON structure. Use only DNS namespaces reserved for testing or domains you are explicitly authorized to assess. The profile's `allowed_dns_suffixes` setting is enforced when SAN names are entered.
+You can provide your own profile file with the same JSON structure. The bundled default profile accepts any syntactically valid DNS name. Custom profiles can restrict names with `allowed_dns_suffixes`; an empty list means no suffix restriction. Use certificate issuance only for domains and systems you own or are explicitly authorized to assess.
 
 The menu lets you:
 
@@ -106,7 +106,6 @@ File prompts accept absolute paths, relative paths, and paths beginning with `~/
 2. Test one decimal or hexadecimal candidate.
 3. Test a comma-separated manual list or load candidates from a text file.
 4. Test an inclusive numeric range.
-5. Run a guided analysis session.
 6. After a successful candidate match, generate a proof-of-impact TLS certificate signed by the loaded intermediate CA.
 
 Candidate files accept one decimal or `0x`-prefixed hexadecimal value per line. Blank lines and comments beginning with `#` are ignored.
@@ -117,9 +116,9 @@ Numeric ranges use `START:END` and are limited to 100,000 candidates to prevent 
 
 Option 6 is available only after a candidate has matched the public key of the currently loaded certificate. Loading another certificate clears that verified candidate. The scalar is retained in memory for the current session and is not written to the generated files. When a match is found, the CLI displays the matching scalar in the terminal; treat terminal output and scrollback as sensitive.
 
-The default profile is bundled inside the `ecc_analyzer` package and uses the reserved `.example.test` namespace. The challenge-specific `profiles/el-ascensor-chino.json` remains an external profile in a source checkout (or can be supplied from any path) and is selected explicitly with `--profile`.
+The default profile is bundled inside the `ecc_analyzer` package. It has no DNS suffix allowlist, so it accepts any syntactically valid DNS name. The challenge-specific `profiles/el-ascensor-chino.json` remains an external profile in a source checkout (or can be supplied from any path) and is selected explicitly with `--profile`.
 
-A profile defines the display name, default Subject CN, default SAN DNS names, validity period, and allowed DNS suffixes. These values can be edited in the interactive prompts, but every SAN name must remain within the selected profile's configured suffix scope. Custom profiles should use reserved test namespaces or domains that you are explicitly authorized to assess. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
+A profile defines the display name, default Subject CN, default SAN DNS names, validity period, and optional allowed DNS suffixes. These values can be edited in the interactive prompts. When suffixes are configured, every SAN name must remain within that scope; an empty suffix list disables suffix filtering. The Issuer is always taken from the loaded CA certificate; it is not an arbitrary text field.
 
 The generator checks that the loaded certificate is a currently valid CA with `BasicConstraints CA:TRUE` and `KeyUsage keyCertSign`, verifies the candidate scalar against its EC public key, creates a separate server key and CSR, and verifies the issued certificate signature before writing output. It refuses to overwrite existing output files.
 

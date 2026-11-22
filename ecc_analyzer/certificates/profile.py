@@ -1,4 +1,4 @@
-"""Certificate profile loading and strict DNS scope validation."""
+"""Certificate profile loading and optional DNS scope validation."""
 
 from __future__ import annotations
 
@@ -24,7 +24,10 @@ class CertificateProfile:
 def load_profile(path: str | Path | None = None) -> CertificateProfile:
     """Load and validate a JSON certificate profile.
 
-    If path is omitted, the package's generic .example.test profile is used.
+    If path is omitted, the bundled generic profile is used. Its empty DNS
+    suffix allowlist permits any syntactically valid DNS name; this is intended
+    for explicitly authorized lab use. Custom profiles can set suffixes to
+    restrict certificate issuance.
     FileNotFoundError/OSError are preserved for filesystem failures;
     malformed JSON and invalid profile contents raise ValueError.
     A non-path-like path raises TypeError.
@@ -50,8 +53,8 @@ def load_profile(path: str | Path | None = None) -> CertificateProfile:
         raise ValueError("Profile dns_names must be a non-empty list of strings.")
     if type(data["validity_days"]) is not int:
         raise ValueError("Profile validity_days must be an integer.")
-    if not isinstance(data["allowed_dns_suffixes"], list) or not data["allowed_dns_suffixes"] or not all(isinstance(item, str) for item in data["allowed_dns_suffixes"]):
-        raise ValueError("Profile allowed_dns_suffixes must be a non-empty list of strings.")
+    if not isinstance(data["allowed_dns_suffixes"], list) or not all(isinstance(item, str) for item in data["allowed_dns_suffixes"]):
+        raise ValueError("Profile allowed_dns_suffixes must be a list of strings.")
 
     suffixes = _normalize_dns_suffixes(tuple(data["allowed_dns_suffixes"]))
     profile = CertificateProfile(
@@ -92,8 +95,10 @@ def _normalize_dns_name(value: str) -> str:
 
 
 def _normalize_dns_suffixes(allowed_suffixes: tuple[str, ...] | list[str]) -> tuple[str, ...]:
-    if not isinstance(allowed_suffixes, (tuple, list)) or not allowed_suffixes:
-        raise ValueError("At least one allowed DNS suffix is required.")
+    if not isinstance(allowed_suffixes, (tuple, list)):
+        raise ValueError("Allowed DNS suffixes must be a list or tuple.")
+    if not allowed_suffixes:
+        return ()
     normalized: list[str] = []
     for suffix in allowed_suffixes:
         if not isinstance(suffix, str):
@@ -115,6 +120,8 @@ def validate_dns_names(
 
     Returns unique lowercase ASCII names. Raises ValueError for malformed
     names, invalid suffixes, empty input, or names outside the allowed scope.
+    An empty suffix allowlist disables scope filtering but retains DNS syntax
+    validation.
     """
     if not isinstance(names, (tuple, list)) or not names:
         raise ValueError("At least one SAN DNS name is required.")
@@ -122,7 +129,7 @@ def validate_dns_names(
     normalized: list[str] = []
     for raw_name in names:
         name = _normalize_dns_name(raw_name)
-        if not any(name.endswith(suffix) for suffix in suffixes):
+        if suffixes and not any(name.endswith(suffix) for suffix in suffixes):
             raise ValueError(
                 f"{name} is outside this lab profile. Allowed DNS suffixes: {', '.join(suffixes)}"
             )

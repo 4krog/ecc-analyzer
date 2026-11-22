@@ -6,7 +6,5 @@
     "www.service.example.test"
   ],
   "validity_days": 7,
-  "allowed_dns_suffixes": [
-    ".example.test"
-  ]
+  "allowed_dns_suffixes": []
 }

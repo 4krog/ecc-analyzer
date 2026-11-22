@@ -169,34 +169,6 @@ def load_or_reuse_certificate(current_path: Path | None, current_cert: x509.Cert
     return path, cert
 
 
-def guided_analysis(path: Path | None, cert: x509.Certificate | None):
-    path, cert = load_or_reuse_certificate(path, cert)
-    public_key = inspect_certificate(cert, path)
-    print("\n  Choose candidate source:")
-    print("  [1] One candidate")
-    print("  [2] Manual list (comma-separated)")
-    print("  [3] Candidate file")
-    print("  [4] Numeric range")
-    choice = input("\n  Source > ").strip()
-
-    if choice == "1":
-        candidates = [parse_candidate(input("  Candidate (decimal or 0x hex): "))]
-    elif choice == "2":
-        raw = input("  Candidates (comma-separated): ")
-        candidates = [parse_candidate(item) for item in raw.split(",") if item.strip()]
-        if not candidates:
-            raise ValueError("No candidates supplied.")
-    elif choice == "3":
-        candidate_path = ask_path("  Candidate file path: ")
-        candidates = read_candidates(candidate_path)
-    elif choice == "4":
-        candidates = parse_range(input("  Range START:END: "))
-    else:
-        raise ValueError("Unknown candidate source.")
-    matching_scalar = check_candidates(public_key, candidates)
-    return path, cert, matching_scalar
-
-
 def generate_certificate_interactive(
     cert: x509.Certificate, private_scalar: int, profile_path: Path | None = None
 ) -> None:
@@ -244,7 +216,6 @@ def main_menu(profile_path: Path | None = None) -> int:
         print("  [2] Test single candidate")
         print("  [3] Test candidate list")
         print("  [4] Test numeric range")
-        print("  [5] Guided analysis")
         print("  [6] Generate proof-of-impact certificate")
         print("  [0] Exit")
         separator()
@@ -313,10 +284,6 @@ def main_menu(profile_path: Path | None = None) -> int:
                 verified_scalar = None
                 candidates = parse_range(input("  Range START:END: "))
                 verified_scalar = check_candidates(cert.public_key(), candidates)
-                pause()
-            elif choice == "5":
-                verified_scalar = None
-                cert_path, cert, verified_scalar = guided_analysis(cert_path, cert)
                 pause()
             elif choice == "6":
                 if cert is None:
