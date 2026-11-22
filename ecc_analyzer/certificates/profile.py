@@ -1,4 +1,4 @@
-"""Certificate profile loading and strict DNS scope validation."""
+"""Certificate profile loading and optional DNS scope validation."""
 
 from __future__ import annotations
 
@@ -120,6 +120,8 @@ def validate_dns_names(
 
     Returns unique lowercase ASCII names. Raises ValueError for malformed
     names, invalid suffixes, empty input, or names outside the allowed scope.
+    An empty suffix allowlist disables scope filtering but retains DNS syntax
+    validation.
     """
     if not isinstance(names, (tuple, list)) or not names:
         raise ValueError("At least one SAN DNS name is required.")
